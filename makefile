@@ -37,4 +37,4 @@ $(CUDATARGET): $(CUDASRCS)
 
 # Clean up
 clean:
-	rm -f $(CPUTARGET) $(CUDATARGET) tmp tmp.ppm *.o
+	rm -f $(CPUTARGET) $(CUDATARGET) CudaOut CudaOut.ppm *.o
