@@ -57,7 +57,7 @@ alloc_linearAllocFCAllocate(hrAlloc); HitRecord * h = NULL;
 */
 
 RGBColorF ray_c(Ray r, const ObjectLL *world, int depth) {
-
+    // Recurisive break, stop tracing rays once we hae reached deepest recursion level
     if (depth <= 0) {
         return (RGBColorF){0};
     }
@@ -474,33 +474,39 @@ int main(int argc, char *argv[]) {
         int seed = 100;
 
         // set camera parameters
-        vec3 lookFrom = {.x = 13.0, .y = 2.0, .z = 3.0};
-        vec3 lookAt = {.x = 0.0, .y = 0.0, .z = 0.0};
-        vec3 up = {.x = 0.0, .y = 1.0, .z = 0.0};
+        vec3 lookFrom = {.x = 13.0, .y = 2.0, .z = 3.0}; //Camera location
+        vec3 lookAt = {.x = 0.0, .y = 0.0, .z = 0.0};// Camera direction
+        vec3 up = {.x = 0.0, .y = 1.0, .z = 0.0}; //Specify which direction is  "Up"
 
-        CFLOAT distToFocus = 10.0;
-        CFLOAT aperture = 0.1;
+        CFLOAT distToFocus = 10.0; //focal length
+        CFLOAT aperture = 0.1; //aperture size
 
-        Camera c;
+        Camera c; //camera object
         cam_setLookAtCamera(&c, lookFrom, lookAt, up, 20, aspect_ratio,
                             aperture, distToFocus);
 
         Ray r;
         RGBColorF temp;
 
+
+        // -----------WORLD SETUP------------//
+        // ONLY OPAQUE SPHERES
         // memory allocation for the objects in the world
         DynamicStackAlloc *dsa = alloc_createDynamicStackAllocD(1024, 100);
         // DynamicStackAlloc * dsa1 = alloc_createDynamicStackAllocD(1024, 100);
         DynamicStackAlloc *dsa0 = alloc_createDynamicStackAllocD(1024, 10);
         ObjectLL *world = obj_createObjectLL(dsa0, dsa);
 
-        Image img[4];
 
+        //Loading textures
+        Image img[4];
         tex_loadImage(&img[0], "./test_textures/kitchen_probe.jpg");
         tex_loadImage(&img[1], "./test_textures/campus_probe.jpg");
         tex_loadImage(&img[2], "./test_textures/building_probe.jpg");
         tex_loadImage(&img[3], "./test_textures/kitchen_probe.jpg");
 
+
+        // Procedurally add spheres into the world
         randomSpheres2(world, dsa, 4, img, &seed);
         printf("Scene initialized\n");
 
@@ -542,6 +548,7 @@ int main(int argc, char *argv[]) {
         CFLOAT pcR, pcG, pcB;
 
 #pragma omp for
+    // Assign different threads different pixels to trace
         for (int l = 0; l < WIDTH * HEIGHT; l++) {
             // int z = omp_get_thread_num();
 
@@ -549,6 +556,7 @@ int main(int argc, char *argv[]) {
             int i = l % WIDTH;
             pcR = pcG = pcB = 0.0;
 
+            // Trace a single pixel mmultiple times to account for non-deterministic scattering
             for (int k = 0; k < SAMPLES_PER_PIXEL; k++) {
                 CFLOAT u =
                     ((CFLOAT)i + util_randomFloat(0.0, 1.0)) / (WIDTH - 1);
@@ -569,7 +577,7 @@ int main(int argc, char *argv[]) {
                 writeColor(pcR, pcG, pcB, SAMPLES_PER_PIXEL);
 
             localSteps += 1;
-
+            // Synchronisation and progress tracking
             if (localSteps % stepSize == stepSize - 1) {
 #pragma omp atomic
                 stepsCompleted += 1;
