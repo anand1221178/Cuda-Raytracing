@@ -1,10 +1,12 @@
 # Compiler and flags
 CC = gcc
+NVCC = nvcc
 CFLAGS = -fopenmp -I ./include
+CUDAFLAGS = -I ./include -O3
 LDFLAGS = -lm
 
 # Source files
-SRCS = main.c \
+CPUSRCS = main.c \
        sources/allocator.c \
        sources/camera.c \
        sources/color.c \
@@ -16,15 +18,23 @@ SRCS = main.c \
        sources/texture.c \
        sources/util.c
 
-# Output binary
-TARGET = raytracer
+CUDASRCS = cudaray.cu cuda_kernels.cu
 
-# Build rule
-all: $(TARGET)
+# Output binaries
+CPUTARGET = raytracer
+CUDATARGET = cudaray
 
-$(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET) $(LDFLAGS)
+# Default target builds both
+all: $(CPUTARGET) $(CUDATARGET)
 
-# Clean rule
+# Build CPU OpenMP raytracer
+$(CPUTARGET): $(CPUSRCS)
+	$(CC) $(CFLAGS) $(CPUSRCS) -o $(CPUTARGET) $(LDFLAGS)
+
+# Build CUDA raytracer
+$(CUDATARGET): $(CUDASRCS)
+	$(NVCC) $(CUDAFLAGS) $(CUDASRCS) -o $(CUDATARGET)
+
+# Clean up
 clean:
-	rm -f $(TARGET)
+	rm -f $(CPUTARGET) $(CUDATARGET) tmp tmp.ppm *.o
