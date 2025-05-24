@@ -23,7 +23,7 @@ struct vec3 {
         return vec3(x - v.x, y - v.y, z - v.z);
     }
 
-    __host__ __device__ vec3 operator*(float t) const {
+    __host__ __device__ inline vec3 operator*(float t) const {
         return vec3(x * t, y * t, z * t);
     }
 
@@ -38,6 +38,14 @@ struct vec3 {
     __host__ __device__ vec3 normalized() const {
         float len = length();
         return (*this) * (1.0f / len);
+    }
+
+    __host__ __device__ vec3 cross(const vec3& v) const {
+    return vec3(
+        y * v.z - z * v.y,
+        z * v.x - x * v.z,
+        x * v.y - y * v.x
+    );
     }
 };
 

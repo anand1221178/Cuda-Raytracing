@@ -17,7 +17,7 @@
 #include "hypatiaINC.h"
 #include "material.h"
 #include "outfile.h"
-#include "ray.h"
+#include "ray.h"    
 #include "sphere.h"
 #include "texture.h"
 #include "types.h"
@@ -458,6 +458,7 @@ int main(int argc, char *argv[]) {
     const int HEIGHT = 640;
     const int SAMPLES_PER_PIXEL = 100;
     const int MAX_DEPTH = 50;
+    // Create buffer for output image (WIDTH * HEIGHT * RGBCOLOR)
     RGBColorU8 *image =
         (RGBColorU8 *)malloc(sizeof(RGBColorF) * HEIGHT * WIDTH);
 
@@ -471,7 +472,7 @@ int main(int argc, char *argv[]) {
     {
         size_t localSteps = 0;
 
-        int seed = 100;
+        int seed = 101;
 
         // set camera parameters
         vec3 lookFrom = {.x = 13.0, .y = 2.0, .z = 3.0}; //Camera location
@@ -492,6 +493,7 @@ int main(int argc, char *argv[]) {
         // -----------WORLD SETUP------------//
         // ONLY OPAQUE SPHERES
         // memory allocation for the objects in the world
+        // Dynamic memeory for objects and hit records
         DynamicStackAlloc *dsa = alloc_createDynamicStackAllocD(1024, 100);
         // DynamicStackAlloc * dsa1 = alloc_createDynamicStackAllocD(1024, 100);
         DynamicStackAlloc *dsa0 = alloc_createDynamicStackAllocD(1024, 10);
@@ -548,6 +550,7 @@ int main(int argc, char *argv[]) {
         CFLOAT pcR, pcG, pcB;
 
 #pragma omp for
+// Per pixel ray tracing
     // Assign different threads different pixels to trace
         for (int l = 0; l < WIDTH * HEIGHT; l++) {
             // int z = omp_get_thread_num();
