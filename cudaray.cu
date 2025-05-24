@@ -42,7 +42,7 @@ int main() {
 
     cudaMalloc(&d_img, img_size);
 
-    Sphere h_spheres[2] = {
+    Sphere h_spheres[3] = {
     Sphere{vec3{0.0f, 0.0f, -1.0f}, 0.5f},
     Sphere{vec3{0.0f, -100.5f, -1.0f}, 100.0f}  // ground
     };
