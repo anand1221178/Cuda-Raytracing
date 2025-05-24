@@ -23,7 +23,7 @@ struct vec3 {
         return vec3(x - v.x, y - v.y, z - v.z);
     }
 
-    __host__ __device__ inline vec3 operator*(float t) const {
+    __host__ __device__ vec3 operator*(float t) const {
         return vec3(x * t, y * t, z * t);
     }
 
@@ -48,5 +48,9 @@ struct vec3 {
     );
     }
 };
+__host__ __device__ inline vec3 operator*(float t, const vec3& v) {
+    return vec3(v.x * t, v.y * t, v.z * t);
+}
+
 
 #endif
