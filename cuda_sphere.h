@@ -5,9 +5,20 @@
 #include "cuda_ray.h"
 #include "cuda_hit.h"
 
+enum MaterialType {
+    LAMBERTIAN,
+    METAL,
+    DIELECTRIC
+};
+
 struct Sphere {
     vec3 center;
     float radius;
+    MaterialType mat;
+    vec3 albedo;  // color
+    float fuzz;   // for METAL
+    float ir;     // index of refraction for DIELECTRIC
+
 
     __host__ __device__ bool hit(const Ray& r, float t_min, float t_max, HitRecord& rec) const {
         vec3 oc = r.origin - center;
@@ -32,6 +43,9 @@ struct Sphere {
         rec.set_face_normal(r, outward_normal);
         return true;
     }
+
+
+
 };
 
 #endif

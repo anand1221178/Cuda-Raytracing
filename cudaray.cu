@@ -9,7 +9,7 @@
 
 #define WIDTH 640
 #define HEIGHT 640
-#define SAMPLES_PER_PIXEL 100
+#define SAMPLES_PER_PIXEL 1000
 #define MAX_DEPTH 50
 
 __host__ void save_image(const char* filename, unsigned char* image) {
