@@ -9,6 +9,10 @@ struct HitRecord {
     vec3 normal;
     float t;
     bool front_face;
+    vec3 albedo; // color for the material at the hit point
+    MaterialType material; // ID of the material at the hit point
+    float fuzz; // Fuzziness factor for the material at the hit point
+    float ir; //Dielectric constant for the material at the hit point
 
     __host__ __device__ void set_face_normal(const Ray& r, const vec3& outward_normal) {
         front_face = r.direction.dot(outward_normal) < 0.0f;

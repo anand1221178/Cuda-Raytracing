@@ -87,40 +87,53 @@ __global__ void rayKernel(unsigned char* image, Camera* cam, Sphere* spheres, in
     image[idx + 2] = (unsigned char)(255.99f * pixel_color.z);
 }
 
-__device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation, Ray& scattered, int* seed, const Sphere& sphere) {
-    if (sphere.mat == LAMBERTIAN) {
-        vec3 scatter_dir = rec.normal + random_unit_vector(seed);
-        scattered = Ray(rec.p, scatter_dir);
-        attenuation = sphere.albedo;
-        return true;
+// TAKES incoming ray and a hitrecord
+// Outpuit scattered ray and attenuation
+// ABOVE BEHAVIOUR DIFFERS BASED ON rec.material
+// Include seed for reproducebility
+// r_in -> incoming ray
+// rec -> hit info - did we hit anything?
+// Attenuation -> color tp multiply into the pixel
+//scattered -> new ray dir
+
+__device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation, Ray& scattered, int* seed)
+{
+// FUCNTION TOO HANDLE DIFFERENT SCATTERING RULES
+    switch(rec.material){
+        //---------LAMBERT--------//
+        case LAMBERTIAN:
+
+        break;
+        //---------METAL --------//
+        case METAL:
+
+        break;
+        //-----------DIELETRIC-------//
+        case DIELETRIC:
+
+        break;
     }
-
-    if (sphere.mat == METAL) {
-        vec3 reflected = reflect(r_in.direction.normalized(), rec.normal);
-        scattered = Ray(rec.p, reflected + sphere.fuzz * random_unit_vector(seed));
-        attenuation = sphere.albedo;
-        return dot(scattered.direction, rec.normal) > 0;
-    }
-
-    if (sphere.mat == DIELECTRIC) {
-        attenuation = vec3(1.0f, 1.0f, 1.0f);  // glass = no attenuation
-        float refraction_ratio = rec.front_face ? (1.0f / sphere.ir) : sphere.ir;
-
-        vec3 unit_direction = r_in.direction.normalized();
-        float cos_theta = fminf(dot(-unit_direction, rec.normal), 1.0f);
-        float sin_theta = sqrtf(1.0f - cos_theta * cos_theta);
-
-        bool cannot_refract = refraction_ratio * sin_theta > 1.0f;
-        vec3 direction;
-
-        if (cannot_refract || reflectance(cos_theta, refraction_ratio) > lcg(seed))
-            direction = reflect(unit_direction, rec.normal);
-        else
-            direction = refract(unit_direction, rec.normal, refraction_ratio);
-
-        scattered = Ray(rec.p, direction);
-        return true;
-    }
-
-    return false;
 }
+
+// -------------_RANDOM VECTOR KERNALS------------//
+__device__ vec3 random_in_unit_sphere(int * seed){
+    while(true)
+    {
+        vec3 p = vec3(2.0f * lcg(seed) - 1.0f,2.0f * lcg(seed) - 1.0f,2.0f * lcg(seed) - 1.0f);
+        if(p.length_squared() < 1.0f){
+            return p;
+        }
+    }
+}
+
+// RANDOM UNIT VECTOR -> WILL BE NORMAL
+__device__ vec3 random_unit_vector(int* seed) {
+    return random_in_unit_sphere(seed).normalized();
+}
+
+// 3d considerations
+__device__ vec3 random_on_hemisphere(const vec3& normal, int* seed) {
+    vec3 dir = random_unit_vector(seed);
+    return (dir.dot(normal) > 0.0f) ? dir : -1.0f * dir;
+}
+

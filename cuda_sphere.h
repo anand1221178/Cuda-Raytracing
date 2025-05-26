@@ -41,6 +41,12 @@ struct Sphere {
         rec.p = r.at(rec.t);
         vec3 outward_normal = (rec.p - center) * (1.0f / radius);
         rec.set_face_normal(r, outward_normal);
+
+        // MODIFY HIT RECORD TO ACCOUNT FOR MATERIAL PROPERTIES
+        rec.material = mat;
+        rec.albedo = albedo; // Set the color for the material at the hit point
+        rec.fuzz = fuzz; // Set the fuzziness factor for the material at the hit point
+        rec.ir = ir; // Set the index of refraction for the material at the hit point
         return true;
     }
 

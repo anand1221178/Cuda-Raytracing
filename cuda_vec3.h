@@ -7,6 +7,7 @@
 #define __device__
 #endif
 
+#include <random>
 #include <math.h>
 
 struct vec3 {
@@ -47,10 +48,20 @@ struct vec3 {
         x * v.y - y * v.x
     );
     }
+    __host__ __device__ float length_squared() const {
+        return x * x 
+                + y * y 
+                + z * z;
+    }
+
+
 };
 __host__ __device__ inline vec3 operator*(float t, const vec3& v) {
     return vec3(v.x * t, v.y * t, v.z * t);
 }
 
+__host__ __device__ inline float length_squared(const vec3& v) {
+    return v.x * v.x + v.y * v.y + v.z * v.z;
+}
 
 #endif
