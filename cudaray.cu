@@ -6,13 +6,16 @@
 #include "cuda_ray.h"
 #include "cuda_sphere.h"
 #include "cuda_camera.h"
+#include "cuda_material.h"
+
 #include <vector>
 #include <random>
 
-#define WIDTH 640
-#define HEIGHT 640
-#define SAMPLES_PER_PIXEL 100
-#define MAX_DEPTH 10
+#define WIDTH 1920
+#define HEIGHT 1080
+#define SAMPLES_PER_PIXEL 1000
+#define MAX_DEPTH 50
+#define NUM_SPHERES 30
 
 __host__ void save_image(const char* filename, unsigned char* image) {
     FILE* fp = fopen(filename, "w");
@@ -29,19 +32,19 @@ void build_scene(std::vector<Sphere>& H)
     std::uniform_real_distribution<float> uni(0.0f, 1.0f);
 
     // --- ground ---
-    H.emplace_back(vec3(0,-1000,0), 1000,
-                   CHECKER, vec3(1), 0, 1.0f);
-
+    printf("HERE\n");
+    H.emplace_back(vec3(0,-1000,0), 1000,static_cast<MaterialType>(3), vec3(1), 0, 1.0f); 
     // --- four large metal balls ---
     for (int i=0;i<4;++i) {
         float x = -3.0f + 2.0f*i;
         H.emplace_back(vec3(x,1,0), 1.0f,
-                       METAL, vec3(0.9f), 0.05f, 1.0f);
+        METAL, vec3(0.9f), 0.05f, 1.0f);
     }
 
     // --- small random balls grid ---
-    for (int a=-11;a<=11;++a)
-        for (int b=-11;b<=11;++b) {
+    for (int a=-NUM_SPHERES;a<=NUM_SPHERES;++a)
+    {
+        for (int b=-NUM_SPHERES;b<=NUM_SPHERES;++b) {
             float choose = uni(gen);
             vec3 center(a+0.9f*uni(gen), 0.2f, b+0.9f*uni(gen));
             if ((center-vec3(4,0.2,0)).length() <= 0.9f) continue;
@@ -53,13 +56,14 @@ void build_scene(std::vector<Sphere>& H)
             }
             else if (choose < 0.85f) {           // metal
                 vec3 col = 0.5f*vec3(1+uni(gen),1+uni(gen),1+uni(gen));
-                float fuzz = 0.02f + 0.08f*uni(gen);
+                float fuzz = 0.01f + 0.08f*uni(gen);
                 H.emplace_back(center,0.2f,METAL,col,fuzz,1.0f);
             }
             else {                               // glass
                 H.emplace_back(center,0.2f,DIELECTRIC,vec3(1),0,1.5f);
             }
         }
+    }
 }
 
 int main() {
@@ -68,12 +72,12 @@ int main() {
     unsigned char* d_img;
 
     // ----------SCENE SETUP--------------- //
-    vec3 lookFrom = vec3(13.0f, 3.0f, 3.0f);  // farther & slightly higher
+    vec3 lookFrom = vec3(20.0f, 5.0f, 5.0f);  // farther & slightly higher
     vec3 lookAt   = vec3(0.0f, 0.5f, 0.0f);   // aim just above ground
     vec3 up = {0.0f, 1.0f, 0.0f};
 
     float distToFocus = (lookFrom - lookAt).length();
-    float aperture = 0.15f;
+    float aperture = 0.03f;
     float aspect_ratio = float(WIDTH) / HEIGHT;
 
     Camera h_cam(lookFrom, lookAt, up, 20.0f, aspect_ratio, aperture, distToFocus);

@@ -2,9 +2,9 @@
 // DEVICE FUNCTIONS/GLOBAL FUNCTIONS
 
 #include "cuda_kernels.h"
-#define WIDTH 640
-#define HEIGHT 640
-#define SAMPLES_PER_PIXEL 100
+#define WIDTH 1920
+#define HEIGHT 1080
+#define SAMPLES_PER_PIXEL 1000
 #define MAX_DEPTH 10
 
 // FORWARD DECLARIONS
@@ -183,6 +183,9 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
 {
 // FUCNTION TOO HANDLE DIFFERENT SCATTERING RULES
     switch(rec.material){
+        // ------FLOOR-----//
+        case CHECKER:
+        // FALL THROUGH TO LAMBERT
         //---------LAMBERT--------//
         case LAMBERTIAN:{
             vec3 scatter_dir = rec.normal + random_unit_vector(seed);
