@@ -101,12 +101,21 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
 // FUCNTION TOO HANDLE DIFFERENT SCATTERING RULES
     switch(rec.material){
         //---------LAMBERT--------//
-        case LAMBERTIAN:
-            
+        case LAMBERTIAN:{
+            vec3 scatter_dir = rec.normal + random_unit_vector(seed);
+            if (scatter_dir.length_squared() < 1e-8f)
+                scatter_dir = rec.normal;
+
+            scattered = Ray(rec.p, scatter_dir);
+            attenuation = rec.albedo;
+            return true;
+        }
         break;
         //---------METAL --------//
         case METAL:
-
+        {
+            r_in.direction = r_in.normalized();
+        }
         break;
         //-----------DIELETRIC-------//
         case DIELECTRIC:
