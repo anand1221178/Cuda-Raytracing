@@ -4,12 +4,13 @@
 #include "cuda_vec3.h"
 #include "cuda_ray.h"
 #include "cuda_hit.h"
+#include "cuda_material.h"
 
-enum MaterialType {
-    LAMBERTIAN,
-    METAL,
-    DIELECTRIC
-};
+// enum MaterialType {
+//     LAMBERTIAN,
+//     METAL,
+//     DIELECTRIC
+// };
 
 struct Sphere {
     vec3 center;

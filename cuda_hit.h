@@ -3,6 +3,8 @@
 
 #include "cuda_vec3.h"
 #include "cuda_ray.h"
+#include "cuda_sphere.h"
+#include "cuda_material.h"
 
 struct HitRecord {
     vec3 p;         // point of intersection

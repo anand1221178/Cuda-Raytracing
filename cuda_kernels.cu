@@ -4,7 +4,7 @@
 #include "cuda_kernels.h"
 #define WIDTH 640
 #define HEIGHT 640
-#define SAMPLES_PER_PIXEL 1000
+#define SAMPLES_PER_PIXEL 500
 #define MAX_DEPTH 50
 
 // linear congruential generator -> used to control randomness on cuda
@@ -87,14 +87,14 @@ __global__ void rayKernel(unsigned char* image, Camera* cam, Sphere* spheres, in
     image[idx + 2] = (unsigned char)(255.99f * pixel_color.z);
 }
 
-// TAKES incoming ray and a hitrecord
-// Outpuit scattered ray and attenuation
-// ABOVE BEHAVIOUR DIFFERS BASED ON rec.material
-// Include seed for reproducebility
-// r_in -> incoming ray
-// rec -> hit info - did we hit anything?
-// Attenuation -> color tp multiply into the pixel
-//scattered -> new ray dir
+/* TAKES incoming ray and a hitrecord
+ Outpuit scattered ray and attenuation
+ ABOVE BEHAVIOUR DIFFERS BASED ON rec.material
+ Include seed for reproducebility
+ r_in -> incoming ray
+ rec -> hit info - did we hit anything?
+Attenuation -> color tp multiply into the pixel
+scattered -> new ray dir*/
 
 __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation, Ray& scattered, int* seed)
 {
@@ -102,14 +102,14 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
     switch(rec.material){
         //---------LAMBERT--------//
         case LAMBERTIAN:
-
+            
         break;
         //---------METAL --------//
         case METAL:
 
         break;
         //-----------DIELETRIC-------//
-        case DIELETRIC:
+        case DIELECTRIC:
 
         break;
     }
