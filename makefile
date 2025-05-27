@@ -1,8 +1,9 @@
 # Compiler and flags
 CC = gcc
 NVCC = nvcc
-CFLAGS = -fopenmp -I ./include
+CFLAGS = -fopenmp -I ./include 
 CUDAFLAGS = -I ./include -O3
+CUDAFLAGS = -I ./include -O3 -rdc=true
 LDFLAGS = -lm
 
 # Source files

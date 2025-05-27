@@ -15,13 +15,19 @@ struct vec3 {
 
     __host__ __device__ vec3() : x(0), y(0), z(0) {}
     __host__ __device__ vec3(float x, float y, float z) : x(x), y(y), z(z) {}
+    __host__ __device__ vec3(float s) : x(s), y(s), z(s) {}
+
 
     __host__ __device__ vec3 operator+(const vec3& v) const {
         return vec3(x + v.x, y + v.y, z + v.z);
     }
 
     __host__ __device__ vec3 operator-(const vec3& v) const {
-        return vec3(x - v.x, y - v.y, z - v.z);
+        return vec3(x-v.x, y-v.y, z-v.z);
+    }
+
+    __host__ __device__ vec3 operator-() const {
+        return vec3(-x,-y,-z);
     }
 
     __host__ __device__ vec3 operator*(float t) const {
@@ -36,10 +42,14 @@ struct vec3 {
         return sqrtf(x * x + y * y + z * z);
     }
 
-    __host__ __device__ vec3 normalized() const {
+    __host__ __device__
+    vec3 normalized() const {
         float len = length();
-        return (*this) * (1.0f / len);
+        if (len > 0.0f)               // <- guard
+            return (*this) * (1.0f / len);
+        return vec3(0.0f);            // return safe zero vector instead of NaN
     }
+
 
     __host__ __device__ vec3 cross(const vec3& v) const {
     return vec3(
@@ -54,6 +64,12 @@ struct vec3 {
                 + z * z;
     }
 
+    __host__ __device__ vec3& operator+=(const vec3& v)
+    {
+        x += v.x, y+= v.y, z+=v.z;
+        return *this;
+    }
+
 
 };
 __host__ __device__ inline vec3 operator*(float t, const vec3& v) {
@@ -62,6 +78,13 @@ __host__ __device__ inline vec3 operator*(float t, const vec3& v) {
 
 __host__ __device__ inline float length_squared(const vec3& v) {
     return v.x * v.x + v.y * v.y + v.z * v.z;
+}
+
+
+
+__host__ __device__
+inline vec3 operator*(const vec3& a, const vec3& b) {
+    return vec3(a.x * b.x, a.y * b.y, a.z * b.z);
 }
 
 #endif

@@ -13,6 +13,8 @@
 // };
 
 struct Sphere {
+    // Constructor
+    __host__ __device__ Sphere(vec3 c, float r, MaterialType m, vec3 a, float f, float i): center(c), radius(r), mat(m), albedo(a), fuzz(f), ir(i) {}
     vec3 center;
     float radius;
     MaterialType mat;
@@ -45,9 +47,19 @@ struct Sphere {
 
         // MODIFY HIT RECORD TO ACCOUNT FOR MATERIAL PROPERTIES
         rec.material = mat;
-        rec.albedo = albedo; // Set the color for the material at the hit point
+        // rec.albedo = albedo; // Set the color for the material at the hit point
         rec.fuzz = fuzz; // Set the fuzziness factor for the material at the hit point
         rec.ir = ir; // Set the index of refraction for the material at the hit point
+        if (mat == CHECKER) {
+            // project hit point onto X-Z plane at y = 0
+            float dx = rec.p.x;
+            float dz = rec.p.z;
+            float pattern = sinf(10.0f * dx) * sinf(10.0f * dz);
+            rec.albedo = (pattern < 0.0f) ? vec3(0.1f) : vec3(0.9f);
+        } else {
+            rec.albedo = albedo;
+        }
+
         return true;
     }
 
