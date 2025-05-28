@@ -72,7 +72,7 @@ int main() {
     unsigned char* d_img;
 
     // ----------SCENE SETUP--------------- //
-    vec3 lookFrom = vec3(20.0f, 10.0f, 5.0f);  // farther & slightly higher
+    vec3 lookFrom = vec3(20.0f, 5.0f, 20.0f);  // farther & slightly higher
     vec3 lookAt   = vec3(0.0f, 0.5f, 0.0f);   // aim just above ground
     vec3 up = {0.0f, 1.0f, 0.0f};
 
