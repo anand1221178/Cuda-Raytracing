@@ -4,8 +4,9 @@
 #include "cuda_kernels.h"
 #define WIDTH 1920
 #define HEIGHT 1080
-#define SAMPLES_PER_PIXEL 1000
+#define SAMPLES_PER_PIXEL 200
 #define MAX_DEPTH 10
+#define NUM_SPHERES 25
 
 // FORWARD DECLARIONS
 __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation, Ray& scattered, int* seed);
