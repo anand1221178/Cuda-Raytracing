@@ -3,7 +3,7 @@ CC = gcc
 NVCC = nvcc
 CFLAGS = -fopenmp -I ./include 
 CUDAFLAGS = -I ./include -O3
-CUDAFLAGS = -I ./Common -I ./include -O3 -rdc=true stb_image_impl.cpp
+CUDAFLAGS = -I ./Common -I ./include -O3 -rdc=true -diag-suppress 20054 -diag-suppress 26 -std=c++14 --expt-relaxed-constexpr
 LDFLAGS = -lm
 
 # Source files
@@ -34,7 +34,7 @@ $(CPUTARGET): $(CPUSRCS)
 
 # Build CUDA raytracer
 $(CUDATARGET): $(CUDASRCS)
-	$(NVCC) $(CUDAFLAGS) $(CUDASRCS) -o $(CUDATARGET)
+	$(NVCC) $(CUDAFLAGS) stb_image_impl.cpp $(CUDASRCS) -o $(CUDATARGET)
 
 # Clean up
 clean:

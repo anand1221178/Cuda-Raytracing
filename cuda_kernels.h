@@ -1,14 +1,30 @@
-// DECLARTION FILE
-
+// DECLARATION FILE
 #ifndef CUDA_KERNELS_H
 #define CUDA_KERNELS_H
 
-// INCLUDES
 #include "cuda_vec3.h"
 #include "cuda_ray.h"
 #include "cuda_sphere.h"
 #include "cuda_camera.h"
 
-__global__ void rayKernel(unsigned char* image, Camera* cam, Sphere* spheres, int n);
-__device__ vec3 traceRay(const Ray& r, Sphere* spheres, int n);
+#define MAX_SPHERES 64            // make sure n ≤ MAX_SPHERES at launch
+
+// ── constant-memory scene ──────────────────────────────────────────────────────
+// Declare as byte buffer to avoid constructor issues
+extern __constant__ unsigned char const_spheres_buffer[];
+
+
+// ── kernel prototypes ─────────────────────────────────────────────────────────
+__global__ void rayKernel   (unsigned char* image, Camera* cam,
+                                    Sphere* spheres, int n, int maxDepth);
+
+__global__ void rayKernel_constant(unsigned char* image, Camera* cam,
+                                   int n, int maxDepth);
+
+
+// traceRay keeps its original signature
+__device__ vec3 traceRay(const Ray& r, Sphere* spheres,
+                         int n, int depth, int* seed);
+
+
 #endif

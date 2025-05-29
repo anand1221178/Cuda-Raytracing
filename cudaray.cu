@@ -11,8 +11,13 @@
 #include "cuda_texobj.h"
 #include <vector>
 #include <random>
+#include <iostream>              // <<< add this right after the other #includes
+
 
 extern __constant__ cudaTextureObject_t dev_textures[5];
+
+// Define constant memory as a byte buffer to avoid constructor issues
+__constant__ unsigned char const_spheres_buffer[64 * sizeof(Sphere)];
 
 // FINAL RUN PARAMS
 // #define WIDTH 1920
@@ -26,6 +31,7 @@ extern __constant__ cudaTextureObject_t dev_textures[5];
 #define SAMPLES_PER_PIXEL 30
 #define MAX_DEPTH 10
 #define NUM_SPHERES 8
+#define MAX_SPHERES 64 
 
 __host__ void save_image(const char* filename, unsigned char* image) {
     FILE* fp = fopen(filename, "w");
@@ -42,7 +48,8 @@ void build_scene(std::vector<Sphere>& H)
     std::uniform_real_distribution<float> uni(0.0f, 1.0f);
 
     // --- ground ---
-    H.emplace_back(vec3(0, -1000, 0), 1000, CHECKER, vec3(1), 0, 1.0f);
+    H.push_back({vec3(0, -1000, 0), 1000.0f,           // radius  -> float
+               CHECKER, vec3(1), 0.0f, 1.0f, -1});
 
     // --- five large spheres for texture testing ---
     vec3 textured_positions[5] = {
@@ -53,13 +60,16 @@ void build_scene(std::vector<Sphere>& H)
         vec3( 6.0f, 1.0f, 6.0f)
     };
     for (int i = 0; i < 5; ++i) {
-    H.emplace_back(textured_positions[i], 1.0f, TEXTURED, vec3(1.0f), 0.0f, 1.0f, i); // bind i-th texture
+    H.push_back({textured_positions[i], 1.0f, TEXTURED, vec3(1.0f), 0.0f, 1.0f, i}); // bind i-th texture
     }
 
 
     // --- two fixed known spheres (for control testing) ---
-    H.emplace_back(vec3(-4, 1.0f, 0), 1.0f, DIELECTRIC, vec3(1), 0, 1.5f); // glass
-    H.emplace_back(vec3( 4, 1.0f, 0), 1.0f, DIELECTRIC, vec3(1), 0, 1.5f); // Glass
+    H.push_back({vec3(-4, 1.0f, 0), 1.0f, DIELECTRIC,
+               vec3(1), 0.0f, 1.5f,-1});                 // fuzz -> 0.0f
+
+    H.push_back({vec3( 4, 1.0f, 0), 1.0f, DIELECTRIC,
+                vec3(1), 0.0f, 1.5f, -1});
 
 
 
@@ -84,17 +94,55 @@ void build_scene(std::vector<Sphere>& H)
             if (choose < 0.6f) {
                 vec3 col = vec3(uni(gen), uni(gen), uni(gen));
                 col = col * col;
-                H.emplace_back(center, 0.2f, LAMBERTIAN, col, 0, 1.0f);
+                H.push_back({center, 0.2f, LAMBERTIAN, col,
+                    0.0f, 1.0f,-1}); 
             } else if (choose < 0.85f) {
                 vec3 col = 0.5f * vec3(1 + uni(gen), 1 + uni(gen), 1 + uni(gen));
                 float fuzz = 0.01f + 0.08f * uni(gen);
-                H.emplace_back(center, 0.2f, METAL, col, fuzz, 1.0f);
+                H.push_back({center, 0.2f, METAL, col, fuzz, 1.0f,-1});
             } else {
-                H.emplace_back(center, 0.2f, DIELECTRIC, vec3(1), 0, 1.5f);
+                H.push_back({center, 0.2f, DIELECTRIC,
+                    vec3(1), 0.0f, 1.5f,-1});
             }
         }
     }
 }
+
+// TIMING TEMPLATE
+template<typename KernelPtr>
+float time_kernel_3D(KernelPtr k,
+                     unsigned char* d_img,
+                     Camera* d_cam,
+                     Sphere* d_spheres,
+                     int n, int maxDepth,
+                     dim3 grid, dim3 block)
+{
+    cudaEvent_t t0, t1;  cudaEventCreate(&t0);  cudaEventCreate(&t1);
+    cudaEventRecord(t0);
+    k<<<grid,block>>>(d_img, d_cam, d_spheres, n, maxDepth);
+    cudaEventRecord(t1);
+    cudaEventSynchronize(t1);
+    float ms=0; cudaEventElapsedTime(&ms,t0,t1);
+    return ms;
+}
+
+// overload for constant-memory kernel (no Sphere* param)
+template<typename KernelPtr>
+float time_kernel_const(KernelPtr k,
+                        unsigned char* d_img,
+                        Camera* d_cam,
+                        int n, int maxDepth,
+                        dim3 grid, dim3 block)
+{
+    cudaEvent_t t0, t1;  cudaEventCreate(&t0);  cudaEventCreate(&t1);
+    cudaEventRecord(t0);
+    k<<<grid,block>>>(d_img, d_cam, n, maxDepth);
+    cudaEventRecord(t1);
+    cudaEventSynchronize(t1);
+    float ms=0; cudaEventElapsedTime(&ms,t0,t1);
+    return ms;
+}
+
 
 int main() {
     size_t img_size = WIDTH * HEIGHT * 3;
@@ -174,30 +222,55 @@ int main() {
     cudaMemcpy(d_spheres, host_spheres.data(),
             host_spheres.size()*sizeof(Sphere), cudaMemcpyHostToDevice);
 
+    // ------------ copy the same scene to constant memory once ------------
+    cudaMemcpyToSymbol(const_spheres_buffer,
+        host_spheres.data(),
+        host_spheres.size()*sizeof(Sphere));
 
     // TODO: Launch rayKernel here
     cudaDeviceSetLimit(cudaLimitStackSize, 32768); // or 32768 for deep recursion
 
+    dim3 block2D(16,16);                                    // for original 2-D kernel
+    dim3 grid2D((WIDTH+block2D.x-1)/block2D.x,
+                (HEIGHT+block2D.y-1)/block2D.y);
+
+    dim3 block1D(256);                                      // for shared/constant
+    dim3 grid1D((WIDTH*HEIGHT + block1D.x - 1)/block1D.x);
+
+
     dim3 block(16, 16);
     dim3 grid((WIDTH + block.x - 1) / block.x, (HEIGHT + block.y - 1) / block.y);
-
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
-    rayKernel<<<grid,block>>>(d_img,d_cam,d_spheres,
-        static_cast<int>(host_spheres.size()));
+    rayKernel<<<grid, block>>>(d_img, d_cam, d_spheres,
+        static_cast<int>(host_spheres.size()),
+        MAX_DEPTH);      // add arg
     cudaDeviceSynchronize();
 
-    cudaEventRecord(stop);
+
+    float t_global = time_kernel_3D(rayKernel,           // your original
+        d_img, d_cam, d_spheres,
+        host_spheres.size(), MAX_DEPTH,
+        grid2D, block2D);
 
     cudaMemcpy(h_img, d_img, img_size, cudaMemcpyDeviceToHost);
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    save_image("CudaOut.ppm", h_img);
-    printf("Image saved as CudaOut.ppm\n");
-    printf("Time take to compute image using global memory :%f ms\n", milliseconds);
+    save_image("out_global.ppm", h_img);
+    std::cout << "Global   " << t_global << "  ms  (out_global.ppm)\n";
+
+    // -------------------------------------------------------------------
+    float t_const  = time_kernel_const(rayKernel_constant,
+            d_img, d_cam,
+            host_spheres.size(), MAX_DEPTH,
+            grid1D, block1D);
+
+    cudaMemcpy(h_img, d_img, img_size, cudaMemcpyDeviceToHost);
+    save_image("out_const.ppm", h_img);
+    std::cout << "Const    " << t_const  << "  ms  (out_const.ppm)\n";
+
+    // summary
+    std::cout << "Speed-up vs Global  →  Const: "
+    << t_global/t_const  << "×\n";
+
+
+    cudaMemcpy(h_img, d_img, img_size, cudaMemcpyDeviceToHost);
 
     cudaFree(d_img);
     cudaFree(d_cam);

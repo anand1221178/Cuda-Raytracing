@@ -7,17 +7,14 @@
 #include "cuda_material.h"
 
 struct Sphere {
+      vec3  center;
+      float radius;
+      MaterialType mat;
+      vec3  albedo;
+      float fuzz;
+      float ir;
+      int   texture_id;
 
-    vec3 center;
-    float radius;
-    MaterialType mat;
-    vec3 albedo;  // color
-    float fuzz;   // for METAL
-    float ir;     // index of refraction for DIELECTRIC
-    int texture_id; // for TEXTURED
-    __host__ __device__
-    Sphere(vec3 c, float r, MaterialType m, vec3 a, float f, float i, int tex_id = -1)
-    : center(c), radius(r), mat(m), albedo(a), fuzz(f), ir(i), texture_id(tex_id) {}
 
     __host__ __device__ bool hit(const Ray& r, float t_min, float t_max, HitRecord& rec) const {
         vec3 oc = r.origin - center;

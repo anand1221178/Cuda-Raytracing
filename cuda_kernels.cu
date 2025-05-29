@@ -15,6 +15,7 @@
 #define SAMPLES_PER_PIXEL 30
 #define MAX_DEPTH 10
 #define NUM_SPHERES 8
+#define MAX_SPHERES 64 
 
 
 // FORWARD DECLARIONS
@@ -22,6 +23,9 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
 
 // Texture memory declaration
 __constant__ cudaTextureObject_t dev_textures[5];
+
+// Only declare, don't define - let cudaMemcpyToSymbol handle it
+// The extern declaration is in cuda_kernels.h
 
 
 // linear congruential generator -> used to control randomness on cuda
@@ -152,7 +156,7 @@ Image : GPU memory buffer
 cam : ptr to camera
 spheres -> scene in this case
 n : number of spheres*/
-__global__ void rayKernel(unsigned char* image, Camera* cam, Sphere* spheres, int n) {
+__global__ void rayKernel(unsigned char* image, Camera* cam, Sphere* spheres, int n, int maxDepth) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= WIDTH || y >= HEIGHT) return;
@@ -281,6 +285,40 @@ __device__ vec3 checker_color(const vec3& p) {
 }
 
 
+// ───────────────────────────────────────────────────────────────────────────── 
+// CONSTANT-MEMORY KERNEL
+// ─────────────────────────────────────────────────────────────────────────────
+__global__ void rayKernel_constant(unsigned char* image,
+      Camera*       cam,
+      int           n,
+      int           maxDepth)
+{
+int tid = blockIdx.x * blockDim.x + threadIdx.x;
+int x   = tid % WIDTH;
+int y   = tid / WIDTH;
+if (x >= WIDTH || y >= HEIGHT) return;
+
+int seed = x + y * WIDTH + 12345;
+
+vec3 pixel_color = vec3(0);
+for (int s = 0; s < SAMPLES_PER_PIXEL; ++s) {
+float u = (x + lcg(&seed)) / float(WIDTH  - 1);
+float v = (y + lcg(&seed)) / float(HEIGHT - 1);
+Ray r   = cam->get_ray(u, v, &seed, lcg);
+pixel_color += traceRay(r,
+   (Sphere*)const_spheres_buffer,   // read-only broadcast
+   n, maxDepth, &seed);
+}
+pixel_color = pixel_color * (1.0f / SAMPLES_PER_PIXEL);
+pixel_color.x = sqrtf(fminf(fmaxf(pixel_color.x, 0.0f), 1.0f));
+pixel_color.y = sqrtf(fminf(fmaxf(pixel_color.y, 0.0f), 1.0f));
+pixel_color.z = sqrtf(fminf(fmaxf(pixel_color.z, 0.0f), 1.0f));
+
+int idx        = (y * WIDTH + x) * 3;
+image[idx + 0] = (unsigned char)(255.99f * pixel_color.x);
+image[idx + 1] = (unsigned char)(255.99f * pixel_color.y);
+image[idx + 2] = (unsigned char)(255.99f * pixel_color.z);
+}
 
 
 

@@ -27,6 +27,7 @@ struct vec3 {
     }
 
     __host__ __device__ vec3 operator-() const {
+        
         return vec3(-x,-y,-z);
     }
 
