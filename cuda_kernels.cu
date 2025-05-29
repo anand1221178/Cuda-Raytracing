@@ -14,7 +14,7 @@
 #define HEIGHT 720
 #define SAMPLES_PER_PIXEL 30
 #define MAX_DEPTH 10
-#define NUM_SPHERES 8
+#define NUM_SPHERES 3
 #define MAX_SPHERES 64 
 
 

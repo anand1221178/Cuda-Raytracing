@@ -30,7 +30,7 @@ __constant__ unsigned char const_spheres_buffer[64 * sizeof(Sphere)];
 #define HEIGHT 720
 #define SAMPLES_PER_PIXEL 30
 #define MAX_DEPTH 10
-#define NUM_SPHERES 8
+#define NUM_SPHERES 3
 #define MAX_SPHERES 64 
 
 __host__ void save_image(const char* filename, unsigned char* image) {
@@ -213,6 +213,18 @@ int main() {
 
     std::vector<Sphere> host_spheres;
     build_scene(host_spheres);
+    
+    // Debug: print sphere count and size
+    std::cout << "Number of spheres: " << host_spheres.size() << std::endl;
+    std::cout << "Size of Sphere: " << sizeof(Sphere) << " bytes" << std::endl;
+    std::cout << "Total size needed: " << host_spheres.size() * sizeof(Sphere) << " bytes" << std::endl;
+    std::cout << "Constant memory buffer size: " << sizeof(const_spheres_buffer) << " bytes" << std::endl;
+    
+    std::cout << "Total spheres in scene: " << host_spheres.size() << std::endl;
+    if (host_spheres.size() > MAX_SPHERES) {
+        std::cerr << "ERROR: Scene has " << host_spheres.size() 
+                  << " spheres, but constant memory can only hold " << MAX_SPHERES << std::endl;
+    }
 
 
     
@@ -225,7 +237,7 @@ int main() {
     // ------------ copy the same scene to constant memory once ------------
     cudaMemcpyToSymbol(const_spheres_buffer,
         host_spheres.data(),
-        host_spheres.size()*sizeof(Sphere));
+        host_spheres.size() * sizeof(Sphere));
 
     // TODO: Launch rayKernel here
     cudaDeviceSetLimit(cudaLimitStackSize, 32768); // or 32768 for deep recursion
