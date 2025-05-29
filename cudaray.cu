@@ -59,7 +59,7 @@ void build_scene(std::vector<Sphere>& H)
 
     // --- two fixed known spheres (for control testing) ---
     H.emplace_back(vec3(-4, 1.0f, 0), 1.0f, DIELECTRIC, vec3(1), 0, 1.5f); // glass
-    H.emplace_back(vec3( 4, 1.0f, 0), 1.0f, LAMBERTIAN, vec3(0.4f, 0.2f, 0.1f), 0, 1.0f); // diffuse
+    H.emplace_back(vec3( 4, 1.0f, 0), 1.0f, DIELECTRIC, vec3(1), 0, 1.5f); // Glass
 
 
 
