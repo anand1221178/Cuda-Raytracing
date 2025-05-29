@@ -7,15 +7,25 @@
 #include "cuda_sphere.h"
 #include "cuda_camera.h"
 #include "cuda_material.h"
-
+#include "stb_image.h"
+#include "cuda_texobj.h"
 #include <vector>
 #include <random>
 
-#define WIDTH 1920
-#define HEIGHT 1080
-#define SAMPLES_PER_PIXEL 200
+extern __constant__ cudaTextureObject_t dev_textures[5];
+
+// FINAL RUN PARAMS
+// #define WIDTH 1920
+// #define HEIGHT 1080
+// #define SAMPLES_PER_PIXEL 300
+// #define MAX_DEPTH 30
+// #define NUM_SPHERES 25
+
+#define WIDTH 1280
+#define HEIGHT 720
+#define SAMPLES_PER_PIXEL 30
 #define MAX_DEPTH 10
-#define NUM_SPHERES 25
+#define NUM_SPHERES 8
 
 __host__ void save_image(const char* filename, unsigned char* image) {
     FILE* fp = fopen(filename, "w");
@@ -32,35 +42,55 @@ void build_scene(std::vector<Sphere>& H)
     std::uniform_real_distribution<float> uni(0.0f, 1.0f);
 
     // --- ground ---
-    printf("HERE\n");
-    H.emplace_back(vec3(0,-1000,0), 1000,static_cast<MaterialType>(3), vec3(1), 0, 1.0f); 
-    // --- four large metal balls ---
-    for (int i=0;i<4;++i) {
-        float x = -3.0f + 2.0f*i;
-        H.emplace_back(vec3(x,1,0), 1.0f,
-        METAL, vec3(0.9f), 0.05f, 1.0f);
+    H.emplace_back(vec3(0, -1000, 0), 1000, CHECKER, vec3(1), 0, 1.0f);
+
+    // --- five large spheres for texture testing ---
+    vec3 textured_positions[5] = {
+        vec3(-6.0f, 1.0f, 6.0f),
+        vec3(-3.0f, 1.0f, 6.0f),
+        vec3( 0.0f, 1.0f, 6.0f),
+        vec3( 3.0f, 1.0f, 6.0f),
+        vec3( 6.0f, 1.0f, 6.0f)
+    };
+    for (int i = 0; i < 5; ++i) {
+    H.emplace_back(textured_positions[i], 1.0f, TEXTURED, vec3(1.0f), 0.0f, 1.0f, i); // bind i-th texture
     }
 
-    // --- small random balls grid ---
-    for (int a=-NUM_SPHERES;a<=NUM_SPHERES;++a)
-    {
-        for (int b=-NUM_SPHERES;b<=NUM_SPHERES;++b) {
-            float choose = uni(gen);
-            vec3 center(a+0.9f*uni(gen), 0.2f, b+0.9f*uni(gen));
-            if ((center-vec3(4,0.2,0)).length() <= 0.9f) continue;
 
-            if (choose < 0.6f) {                 // diffuse
-                vec3 col = vec3(uni(gen),uni(gen),uni(gen));
-                col = col*col;                   // bias towards bright
-                H.emplace_back(center,0.2f,LAMBERTIAN,col,0,1.0f);
-            }
-            else if (choose < 0.85f) {           // metal
-                vec3 col = 0.5f*vec3(1+uni(gen),1+uni(gen),1+uni(gen));
-                float fuzz = 0.01f + 0.08f*uni(gen);
-                H.emplace_back(center,0.2f,METAL,col,fuzz,1.0f);
-            }
-            else {                               // glass
-                H.emplace_back(center,0.2f,DIELECTRIC,vec3(1),0,1.5f);
+    // --- two fixed known spheres (for control testing) ---
+    H.emplace_back(vec3(-4, 1.0f, 0), 1.0f, DIELECTRIC, vec3(1), 0, 1.5f); // glass
+    H.emplace_back(vec3( 4, 1.0f, 0), 1.0f, LAMBERTIAN, vec3(0.4f, 0.2f, 0.1f), 0, 1.0f); // diffuse
+
+
+
+    // --- small random balls grid ---
+    for (int a = -NUM_SPHERES; a <= NUM_SPHERES; ++a)
+    {
+        for (int b = -NUM_SPHERES; b <= NUM_SPHERES; ++b) {
+            vec3 center(a + 0.9f * uni(gen), 0.2f, b + 0.9f * uni(gen));
+
+            // Avoid overlapping the main spheres (control + textured)
+            vec3 exclusion_centers[] = {
+                vec3(-4,1,0), vec3(4,1,0),
+                vec3(-6,1,6), vec3(-3,1,6), vec3(0,1,6), vec3(3,1,6), vec3(6,1,6)
+            };
+
+            bool skip = false;
+            for (const vec3& p : exclusion_centers)
+                if ((center - p).length() < 1.2f) { skip = true; break; }
+            if (skip) continue;
+
+            float choose = uni(gen);
+            if (choose < 0.6f) {
+                vec3 col = vec3(uni(gen), uni(gen), uni(gen));
+                col = col * col;
+                H.emplace_back(center, 0.2f, LAMBERTIAN, col, 0, 1.0f);
+            } else if (choose < 0.85f) {
+                vec3 col = 0.5f * vec3(1 + uni(gen), 1 + uni(gen), 1 + uni(gen));
+                float fuzz = 0.01f + 0.08f * uni(gen);
+                H.emplace_back(center, 0.2f, METAL, col, fuzz, 1.0f);
+            } else {
+                H.emplace_back(center, 0.2f, DIELECTRIC, vec3(1), 0, 1.5f);
             }
         }
     }
@@ -70,6 +100,52 @@ int main() {
     size_t img_size = WIDTH * HEIGHT * 3;
     unsigned char* h_img = (unsigned char*)malloc(img_size);
     unsigned char* d_img;
+    // -----------TEXTURE MEMORY SETUP ---------//
+    CudaTexture h_textures[5];
+    unsigned char* h_tex_data[5];
+    int tex_width[5], tex_height[5], tex_channels[5];
+
+    const char* tex_files[5] = {
+        "./test_textures/beach_probe.jpg",
+        "./test_textures/building_probe.jpg",
+        "./test_textures/campus_probe.jpg",
+        "./test_textures/kitchen_probe.jpg",
+        "./test_textures/tex.jpg"
+    };
+
+    for (int i = 0; i < 5; ++i) {
+        h_tex_data[i] = stbi_load(tex_files[i], &tex_width[i], &tex_height[i], &tex_channels[i], 4);
+        if (!h_tex_data[i]) {
+            printf("Failed to load texture %s\n", tex_files[i]);
+            exit(1);
+        }
+
+        cudaChannelFormatDesc desc = cudaCreateChannelDesc<uchar4>();
+        cudaMallocArray(&h_textures[i].array, &desc, tex_width[i], tex_height[i]);
+
+        cudaMemcpy2DToArray(h_textures[i].array, 0, 0, h_tex_data[i],
+                            tex_width[i] * 4, tex_width[i] * 4, tex_height[i],
+                            cudaMemcpyHostToDevice);
+
+        cudaResourceDesc resDesc = {};
+        resDesc.resType = cudaResourceTypeArray;
+        resDesc.res.array.array = h_textures[i].array;
+
+        cudaTextureDesc texDesc = {};
+        texDesc.addressMode[0] = cudaAddressModeWrap;
+        texDesc.addressMode[1] = cudaAddressModeWrap;
+        texDesc.filterMode = cudaFilterModeLinear;
+        texDesc.readMode = cudaReadModeNormalizedFloat;
+        texDesc.normalizedCoords = 1;
+
+        cudaCreateTextureObject(&h_textures[i].texObj, &resDesc, &texDesc, nullptr);
+    }
+    cudaTextureObject_t h_textureObjs[5];
+    for (int i = 0; i < 5; ++i) {
+        h_textureObjs[i] = h_textures[i].texObj;
+    }
+
+    cudaMemcpyToSymbol(dev_textures, h_textureObjs, sizeof(h_textureObjs));
 
     // ----------SCENE SETUP--------------- //
     vec3 lookFrom = vec3(20.0f, 10.0f, 5.0f);  // farther & slightly higher
@@ -89,6 +165,8 @@ int main() {
 
     std::vector<Sphere> host_spheres;
     build_scene(host_spheres);
+
+
     
     
     Sphere* d_spheres;
@@ -98,6 +176,8 @@ int main() {
 
 
     // TODO: Launch rayKernel here
+    cudaDeviceSetLimit(cudaLimitStackSize, 32768); // or 32768 for deep recursion
+
     dim3 block(16, 16);
     dim3 grid((WIDTH + block.x - 1) / block.x, (HEIGHT + block.y - 1) / block.y);
 

@@ -16,6 +16,11 @@ struct HitRecord {
     float fuzz; // Fuzziness factor for the material at the hit point
     float ir; //Dielectric constant for the material at the hit point
 
+    // Texturing considerations
+
+    float u,v;
+    int texture_id; // <-- add this
+
     __host__ __device__ void set_face_normal(const Ray& r, const vec3& outward_normal) {
         front_face = r.direction.dot(outward_normal) < 0.0f;
         normal = front_face ? outward_normal : outward_normal * -1.0f;

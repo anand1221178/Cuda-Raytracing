@@ -3,7 +3,7 @@ CC = gcc
 NVCC = nvcc
 CFLAGS = -fopenmp -I ./include 
 CUDAFLAGS = -I ./include -O3
-CUDAFLAGS = -I ./include -O3 -rdc=true
+CUDAFLAGS = -I ./Common -I ./include -O3 -rdc=true stb_image_impl.cpp
 LDFLAGS = -lm
 
 # Source files

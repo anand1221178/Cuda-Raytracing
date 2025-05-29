@@ -2,15 +2,26 @@
 // DEVICE FUNCTIONS/GLOBAL FUNCTIONS
 
 #include "cuda_kernels.h"
-#define WIDTH 1920
-#define HEIGHT 1080
-#define SAMPLES_PER_PIXEL 200
+#include <cuda_texture_types.h>
+// FINAL RUN CONFIG
+//#define WIDTH 1920
+// #define HEIGHT 1080
+// #define SAMPLES_PER_PIXEL 300
+// #define MAX_DEPTH 30
+// #define NUM_SPHERES 25
+
+#define WIDTH 1280
+#define HEIGHT 720
+#define SAMPLES_PER_PIXEL 30
 #define MAX_DEPTH 10
-#define NUM_SPHERES 25
+#define NUM_SPHERES 8
+
 
 // FORWARD DECLARIONS
 __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation, Ray& scattered, int* seed);
 
+// Texture memory declaration
+__constant__ cudaTextureObject_t dev_textures[5];
 
 
 // linear congruential generator -> used to control randomness on cuda
@@ -194,7 +205,7 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
                 scatter_dir = rec.normal;
 
             // just before you build the secondary ray
-            const vec3 offset = rec.normal * 0.001f;          // 1 mm bias
+            const vec3 offset = rec.normal *  1e-3f;          // 1 mm bias
             scattered = Ray(rec.p + offset, scatter_dir);     // <-- use p + bias
             attenuation = rec.albedo;
             return true;
@@ -205,7 +216,7 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
             vec3 unit_dir = r_in.direction.normalized();
             vec3 reflected = reflect(unit_dir, rec.normal);
             vec3 perturbed = reflected + rec.fuzz * random_unit_vector(seed);
-            const vec3 offset = rec.normal * 0.001f;          // 1 mm bias
+            const vec3 offset = rec.normal *  1e-3f;          // 1 mm bias
             scattered = Ray(rec.p + offset, perturbed);     // <-- use p + bias
             attenuation = rec.albedo;
             return (scattered.direction.dot(rec.normal) > 0.0f);
@@ -237,14 +248,30 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
             }
         
             // just before you build the secondary ray
-            const vec3 offset = rec.normal * 0.001f;          // 1 mm bias
+            const vec3 offset = rec.normal *  1e-3f;          // 1 mm bias
             scattered = Ray(rec.p + offset, direction);     // <-- use p + bias
 
             return true;
-        }        
+        }
+        case TEXTURED: {
+            // Sample from the bound texture object
+            float4 tex_val = tex2D<float4>(dev_textures[rec.texture_id], rec.u, rec.v);
+            vec3 sampled_color = vec3(tex_val.x, tex_val.y, tex_val.z);
+
+            vec3 scatter_dir = rec.normal + random_unit_vector(seed);
+            if (scatter_dir.length_squared() < 1e-8f)
+                scatter_dir = rec.normal;
+
+            const vec3 offset = rec.normal * 1e-3f;
+            scattered = Ray(rec.p + offset, scatter_dir);
+            attenuation = sampled_color;
+            return true;
+        }
+        
 
         break;
     }
+    return false;
 }
 
 
