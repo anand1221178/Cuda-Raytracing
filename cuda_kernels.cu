@@ -4,17 +4,17 @@
 #include "cuda_kernels.h"
 #include <cuda_texture_types.h>
 // FINAL RUN CONFIG
-//#define WIDTH 1920
-// #define HEIGHT 1080
-// #define SAMPLES_PER_PIXEL 300
-// #define MAX_DEPTH 30
-// #define NUM_SPHERES 25
+#define WIDTH 1920
+#define HEIGHT 1080
+#define SAMPLES_PER_PIXEL 300
+#define MAX_DEPTH 30
+#define NUM_SPHERES 3  // Must stay at 3 due to constant memory constraints (generates ~55 spheres total)
 
-#define WIDTH 1280
-#define HEIGHT 720
-#define SAMPLES_PER_PIXEL 30
-#define MAX_DEPTH 10
-#define NUM_SPHERES 3
+// #define WIDTH 1280
+// #define HEIGHT 720
+// #define SAMPLES_PER_PIXEL 30
+// #define MAX_DEPTH 10
+// #define NUM_SPHERES 3
 #define MAX_SPHERES 64 
 
 
@@ -294,9 +294,11 @@ __global__ void rayKernel_constant(unsigned char* image,
       int           maxDepth)
 {
 int tid = blockIdx.x * blockDim.x + threadIdx.x;
+int total_pixels = WIDTH * HEIGHT;
+if (tid >= total_pixels) return;
+
 int x   = tid % WIDTH;
 int y   = tid / WIDTH;
-if (x >= WIDTH || y >= HEIGHT) return;
 
 int seed = x + y * WIDTH + 12345;
 

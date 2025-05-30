@@ -20,17 +20,17 @@ extern __constant__ cudaTextureObject_t dev_textures[5];
 __constant__ unsigned char const_spheres_buffer[64 * sizeof(Sphere)];
 
 // FINAL RUN PARAMS
-// #define WIDTH 1920
-// #define HEIGHT 1080
-// #define SAMPLES_PER_PIXEL 300
-// #define MAX_DEPTH 30
-// #define NUM_SPHERES 25
+#define WIDTH 1920
+#define HEIGHT 1080
+#define SAMPLES_PER_PIXEL 300
+#define MAX_DEPTH 30
+#define NUM_SPHERES 3  // Must stay at 3 due to constant memory constraints (generates ~55 spheres total)
 
-#define WIDTH 1280
-#define HEIGHT 720
-#define SAMPLES_PER_PIXEL 30
-#define MAX_DEPTH 10
-#define NUM_SPHERES 3
+// #define WIDTH 1280
+// #define HEIGHT 720
+// #define SAMPLES_PER_PIXEL 30
+// #define MAX_DEPTH 10
+// #define NUM_SPHERES 3
 #define MAX_SPHERES 64 
 
 __host__ void save_image(const char* filename, unsigned char* image) {
@@ -281,11 +281,134 @@ int main() {
     std::cout << "Speed-up vs Global  →  Const: "
     << t_global/t_const  << "×\n";
 
+    // ===== BENCHMARK 1: Rays Per Second (RPS) =====
+    std::cout << "\n===== RAYS PER SECOND ANALYSIS =====\n";
+    
+    // Estimate average secondary rays (bounces) - typically 1.5-2x for diffuse scenes
+    float avg_secondary_rays = 1.5f * MAX_DEPTH / 2.0f; // Rough estimate
+    long long primary_rays = (long long)WIDTH * HEIGHT * SAMPLES_PER_PIXEL;
+    long long total_rays = primary_rays * avg_secondary_rays;
+    
+    double rays_per_sec_global = total_rays / (t_global / 1000.0);
+    double rays_per_sec_const = total_rays / (t_const / 1000.0);
+    
+    std::cout << "Primary rays: " << primary_rays << std::endl;
+    std::cout << "Estimated total rays (with bounces): " << total_rays << std::endl;
+    std::cout << "Global kernel: " << rays_per_sec_global / 1e9 << " billion rays/sec" << std::endl;
+    std::cout << "Const kernel: " << rays_per_sec_const / 1e9 << " billion rays/sec" << std::endl;
+
+    // ===== BENCHMARK 2: Memory Bandwidth Utilization =====
+    std::cout << "\n===== MEMORY BANDWIDTH ANALYSIS =====\n";
+    
+    // More realistic memory access calculation
+    // Each ray typically checks ~10-20 spheres on average (not all)
+    size_t sphere_data_size = sizeof(Sphere);
+    size_t avg_spheres_checked = host_spheres.size() / 3; // Rough estimate
+    size_t reads_per_ray = avg_spheres_checked * sphere_data_size;
+    size_t writes_per_pixel = 3 * sizeof(unsigned char);
+    
+    // Account for texture reads (5 textured spheres)
+    size_t texture_reads_per_ray = 4 * sizeof(float) * 5; // float4 per texture sample
+    
+    // Total memory accessed (primary rays only for more accurate estimate)
+    size_t total_sphere_reads = primary_rays * reads_per_ray;
+    size_t total_texture_reads = primary_rays * texture_reads_per_ray / 10; // ~10% rays hit textured spheres
+    size_t total_writes = WIDTH * HEIGHT * writes_per_pixel;
+    size_t total_bytes = total_sphere_reads + total_texture_reads + total_writes;
+    
+    double bandwidth_global_GBps = (total_bytes / 1e9) / (t_global / 1000.0);
+    double bandwidth_const_GBps = (total_bytes / 1e9) / (t_const / 1000.0);
+    
+    // Get device properties for theoretical bandwidth
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    double theoretical_bandwidth_GBps = (prop.memoryClockRate * 1000.0 * 2.0 * prop.memoryBusWidth / 8) / 1e9;
+    
+    std::cout << "Total memory accessed: " << total_bytes / 1e9 << " GB" << std::endl;
+    std::cout << "Global kernel bandwidth: " << bandwidth_global_GBps << " GB/s (" 
+              << (bandwidth_global_GBps / theoretical_bandwidth_GBps * 100) << "% of theoretical)" << std::endl;
+    std::cout << "Const kernel bandwidth: " << bandwidth_const_GBps << " GB/s (" 
+              << (bandwidth_const_GBps / theoretical_bandwidth_GBps * 100) << "% of theoretical)" << std::endl;
+    std::cout << "Theoretical max bandwidth: " << theoretical_bandwidth_GBps << " GB/s" << std::endl;
+
+    // ===== BENCHMARK 3: Occupancy Analysis =====
+    std::cout << "\n===== OCCUPANCY ANALYSIS =====\n";
+    
+    int blockSize2D = 16 * 16;
+    int blockSize1D = 256;
+    int numBlocksGlobal, numBlocksConst;
+    
+    // Calculate occupancy for both kernels
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksGlobal, 
+        rayKernel, blockSize2D, 0);
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksConst, 
+        rayKernel_constant, blockSize1D, 0);
+    
+    int maxBlocksPerSM = prop.maxThreadsPerMultiProcessor / blockSize2D;
+    float occupancy_global = (float)numBlocksGlobal / maxBlocksPerSM;
+    
+    maxBlocksPerSM = prop.maxThreadsPerMultiProcessor / blockSize1D;
+    float occupancy_const = (float)numBlocksConst / maxBlocksPerSM;
+    
+    std::cout << "Device: " << prop.name << std::endl;
+    std::cout << "SMs: " << prop.multiProcessorCount << std::endl;
+    std::cout << "Max threads per SM: " << prop.maxThreadsPerMultiProcessor << std::endl;
+    std::cout << "Global kernel occupancy: " << occupancy_global * 100 << "%" << std::endl;
+    std::cout << "Const kernel occupancy: " << occupancy_const * 100 << "%" << std::endl;
+
+    // ===== BENCHMARK 4: Performance Scaling Analysis =====
+    std::cout << "\n===== PERFORMANCE SCALING ANALYSIS =====\n";
+    std::cout << "Note: For full scaling analysis across multiple configurations,\n";
+    std::cout << "compile and run 'make benchmark && ./benchmark_scaling'\n";
+    
+    // Show scaling formulas
+    std::cout << "\nExpected Scaling Relationships:\n";
+    std::cout << "- Time ∝ Width × Height (linear with pixel count)\n";
+    std::cout << "- Time ∝ Samples per pixel (linear)\n";
+    std::cout << "- Time ∝ Max depth × probability of bounce (sub-linear)\n";
+    
+    // Current configuration performance
+    std::cout << "\nCurrent Configuration Performance:\n";
+    std::cout << "Resolution: " << WIDTH << "x" << HEIGHT << " (" << (WIDTH*HEIGHT/1e6) << " MP)\n";
+    std::cout << "Samples: " << SAMPLES_PER_PIXEL << "\n";
+    std::cout << "Max Depth: " << MAX_DEPTH << "\n";
+    std::cout << "Time: " << t_global << " ms\n";
+    std::cout << "Throughput: " << (WIDTH * HEIGHT) / (t_global / 1000.0) / 1e6 << " MPixels/sec\n";
+    
+    // Estimate performance for other resolutions
+    std::cout << "\nEstimated Performance at Other Resolutions (same samples/depth):\n";
+    float base_pixels = WIDTH * HEIGHT;
+    float base_time = t_global;
+    
+    struct Resolution { int w, h; const char* name; };
+    Resolution resolutions[] = {
+        {640, 360, "360p"},
+        {1280, 720, "720p"}, 
+        {2560, 1440, "1440p"},
+        {3840, 2160, "4K"}
+    };
+    
+    for (const auto& res : resolutions) {
+        float pixels = res.w * res.h;
+        float estimated_time = base_time * (pixels / base_pixels);
+        float estimated_fps = 1000.0f / estimated_time;
+        std::cout << res.name << " (" << res.w << "x" << res.h << "): " 
+                  << estimated_time << " ms (" << estimated_fps << " FPS)\n";
+    }
 
     cudaMemcpy(h_img, d_img, img_size, cudaMemcpyDeviceToHost);
 
     cudaFree(d_img);
     cudaFree(d_cam);
+    cudaFree(d_spheres);
     free(h_img);
+    
+    // Cleanup textures
+    for (int i = 0; i < 5; ++i) {
+        cudaDestroyTextureObject(h_textures[i].texObj);
+        cudaFreeArray(h_textures[i].array);
+        stbi_image_free(h_tex_data[i]);
+    }
+    
     return 0;
 }

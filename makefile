@@ -24,6 +24,7 @@ CUDASRCS = cudaray.cu cuda_kernels.cu
 # Output binaries
 CPUTARGET = raytracer
 CUDATARGET = cudaray
+BENCHMARKTARGET = benchmark_scaling
 
 # Default target builds both
 all: $(CPUTARGET) $(CUDATARGET)
@@ -36,6 +37,13 @@ $(CPUTARGET): $(CPUSRCS)
 $(CUDATARGET): $(CUDASRCS)
 	$(NVCC) $(CUDAFLAGS) stb_image_impl.cpp $(CUDASRCS) -o $(CUDATARGET)
 
+# Build benchmark program
+$(BENCHMARKTARGET): benchmark_scaling.cu cuda_kernels.cu
+	$(NVCC) $(CUDAFLAGS) stb_image_impl.cpp benchmark_scaling.cu cuda_kernels.cu -o $(BENCHMARKTARGET)
+
+# Build all including benchmark
+benchmark: $(BENCHMARKTARGET)
+
 # Clean up
 clean:
-	rm -f $(CPUTARGET) $(CUDATARGET) raytracer tmp.ppm CudaOut CudaOut.ppm *.o
+	rm -f $(CPUTARGET) $(CUDATARGET) $(BENCHMARKTARGET) raytracer tmp.ppm CudaOut CudaOut.ppm *.o *.ppm
