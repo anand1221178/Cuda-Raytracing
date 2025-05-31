@@ -6,8 +6,8 @@
 echo "=== Cleaning previous builds ==="
 make clean
 
-echo "=== Building raytracer and CUDA raytracer ==="
-make
+echo "=== Building CUDA raytracer ==="
+make cudaray
 
 echo "=== Building benchmark scaling ==="
 make benchmark
