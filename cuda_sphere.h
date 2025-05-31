@@ -50,12 +50,23 @@ struct Sphere {
             bool dark = ((ix + iz) & 1);
             rec.albedo = dark ? vec3(0.05f) : vec3(0.95f);
         } else if (mat == TEXTURED) {
-            vec3 p_local = (rec.p - center).normalized();
-            rec.u = 0.5f + atan2f(p_local.z, p_local.x) / (2 * M_PI);
-            rec.v = 0.5f - asinf(p_local.y) / M_PI;
-            rec.albedo = vec3(1); // placeholder, texture sampled later
-            rec.texture_id = texture_id; // ← must be passed via Sphere
+            const float EPS = 1.0e-4f; 
 
+            vec3 p_local = (rec.p - center).normalized();
+
+        /* longitude ------------------------------------------------------------ */
+        float u = 0.5f + atan2f(p_local.z, p_local.x) / (2.0f * M_PI);
+        /* wrap into [0,1-EPS]  (never exactly 1) */
+        u = u - floorf(u);
+        u = fminf(u, 1.0f - EPS);
+
+        /* latitude ------------------------------------------------------------- */
+        float v = 0.5f - asinf(p_local.y) / M_PI;
+        /* clamp into [EPS, 1-EPS] so never 0 or 1 */
+        v = fminf(fmaxf(v, EPS), 1.0f - EPS);
+
+        rec.u = u;
+        rec.v = v;
         } else {
             rec.albedo = albedo;
         }

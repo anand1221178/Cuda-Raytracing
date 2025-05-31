@@ -65,11 +65,16 @@ void build_scene(std::vector<Sphere>& H)
 
 
     // --- two fixed known spheres (for control testing) ---
-    H.push_back({vec3(-4, 1.0f, 0), 1.0f, DIELECTRIC,
-               vec3(1), 0.0f, 1.5f,-1});                 // fuzz -> 0.0f
+    // big mirrors
+    vec3 silver(0.9f);               // bright grey
+    H.push_back({vec3(-4, 1.0f, 0), 1.0f,
+                METAL, silver,
+                0.0f,            // fuzz = 0  → perfect mirror
+                1.0f, -1});           // ir ignored for METAL
 
-    H.push_back({vec3( 4, 1.0f, 0), 1.0f, DIELECTRIC,
-                vec3(1), 0.0f, 1.5f, -1});
+    H.push_back({vec3( 4, 1.0f, 0), 1.0f,
+                METAL, silver,
+                0.0f, 1.0f, -1});
 
 
 
@@ -181,7 +186,7 @@ int main() {
 
         cudaTextureDesc texDesc = {};
         texDesc.addressMode[0] = cudaAddressModeWrap;
-        texDesc.addressMode[1] = cudaAddressModeWrap;
+        texDesc.addressMode[1] = cudaAddressModeClamp;   // latitude (v) – prevent pole seam
         texDesc.filterMode = cudaFilterModeLinear;
         texDesc.readMode = cudaReadModeNormalizedFloat;
         texDesc.normalizedCoords = 1;
@@ -196,7 +201,7 @@ int main() {
     cudaMemcpyToSymbol(dev_textures, h_textureObjs, sizeof(h_textureObjs));
 
     // ----------SCENE SETUP--------------- //
-    vec3 lookFrom = vec3(20.0f, 5.0f, 20.0f);  // farther & slightly higher
+    vec3 lookFrom = vec3(0.0f, 5.0f, -20.0f);  // farther & slightly higher
     vec3 lookAt   = vec3(0.0f, 0.5f, 0.0f);   // aim just above ground
     vec3 up = {0.0f, 1.0f, 0.0f};
 

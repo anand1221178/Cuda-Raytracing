@@ -20,6 +20,7 @@ __constant__ unsigned char const_spheres_buffer[64 * sizeof(Sphere)];
 #define MAX_SPHERES 64
 #define NUM_SPHERES 3  // Fixed for constant memory
 
+
 // Test configuration
 struct TestConfig {
     int width, height, samples, depth;

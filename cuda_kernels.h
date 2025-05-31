@@ -26,5 +26,6 @@ __global__ void rayKernel_constant(unsigned char* image, Camera* cam,
 __device__ vec3 traceRay(const Ray& r, Sphere* spheres,
                          int n, int depth, int* seed);
 
-
+                         
+__device__ float lcg(int* seed);
 #endif
