@@ -1,7 +1,7 @@
 // ALL GPU SIDE LOGIC WILL COME HERE!
 // DEVICE FUNCTIONS/GLOBAL FUNCTIONS
 
-#include "cuda_kernels.h"
+#include "cuda_headers/cuda_kernels.h"
 #include <cuda_texture_types.h>
 // FINAL RUN CONFIG
 #define WIDTH 1920

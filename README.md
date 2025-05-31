@@ -32,13 +32,8 @@ A GPU-accelerated physically-based ray tracer implemented in CUDA, achieving rea
 
 ## Building
 
-The project includes both CPU (OpenMP) and GPU (CUDA) implementations:
-
 ```bash
-# Build everything (CPU + CUDA versions)
-make all
-
-# Build only CUDA raytracer
+# Build CUDA raytracer
 make cudaray
 
 # Build benchmark suite
@@ -71,15 +66,12 @@ This will:
 # Run benchmark tests
 ./benchmark_scaling
 
-# Run CPU version (if built)
-./raytracer
 ```
 
 ## Output
 
 The raytracer generates a PPM image file:
-- **CUDA version**: `CudaOut.ppm`
-- **CPU version**: `tmp.ppm`
+- **CUDA version**: `CudaOut*.ppm`
 
 View the output with any PPM-compatible image viewer:
 ```bash
@@ -103,12 +95,18 @@ Total: 57 spheres
 Cuda-Raytracing/
 ├── cudaray.cu           # Main CUDA implementation
 ├── cuda_kernels.cu      # CUDA kernel implementations
-├── cuda_kernels.h       # Kernel declarations
 ├── benchmark_scaling.cu # Performance benchmarking
-├── main.c               # CPU OpenMP implementation
-├── include/             # Header files
-│   ├── cuda_*.h        # CUDA-specific headers
-│   └── *.h             # Shared headers
+├── cuda_headers/        # CUDA-specific header files
+│   ├── cuda_camera.h
+│   ├── cuda_hit.h
+│   ├── cuda_kernels.h
+│   ├── cuda_material.h
+│   ├── cuda_ray.h
+│   ├── cuda_sphere.h
+│   ├── cuda_texobj.h
+│   ├── cuda_textures.h
+│   └── cuda_vec3.h
+├── include/             # General header files
 ├── Common/              # NVIDIA SDK helper files
 ├── test_textures/       # Environment map textures
 └── makefile            # Build configuration

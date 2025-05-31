@@ -3,7 +3,7 @@ CC = gcc
 NVCC = nvcc
 CFLAGS = -fopenmp -I ./include 
 CUDAFLAGS = -I ./include -O3
-CUDAFLAGS = -I ./Common -I ./include -O3 -rdc=true -diag-suppress 20054 -diag-suppress 26 -std=c++14 --expt-relaxed-constexpr
+CUDAFLAGS = -I ./Common -I ./include -I ./cuda_headers -O3 -rdc=true -diag-suppress 20054 -diag-suppress 26 -std=c++14 --expt-relaxed-constexpr
 LDFLAGS = -lm
 
 # Source files
