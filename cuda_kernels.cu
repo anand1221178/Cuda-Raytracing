@@ -8,7 +8,7 @@
 #define HEIGHT 1080
 #define SAMPLES_PER_PIXEL 300
 #define MAX_DEPTH 30
-#define NUM_SPHERES 3  // Must stay at 3 due to constant memory constraints (generates ~55 spheres total)
+#define NUM_SPHERES 3  // Must stay at 3 due to constant memory constraints (generates 55 spheres total)
 
 // #define WIDTH 1280
 // #define HEIGHT 720
@@ -23,9 +23,6 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
 
 // Texture memory declaration
 __constant__ cudaTextureObject_t dev_textures[5];
-
-// Only declare, don't define - let cudaMemcpyToSymbol handle it
-// The extern declaration is in cuda_kernels.h
 
 
 // linear congruential generator -> used to control randomness on cuda
@@ -141,7 +138,6 @@ __device__ vec3 traceRay(const Ray& r, Sphere* spheres, int n, int depth, int* s
     if (depth <= 0) return vec3(1, 0, 1); // purple for recursion cap
 
     // Sky gradient -> no spheres were hit!
-    // --------- in traceRay(), *after* the hit_anything block ----------
     vec3 unit_dir = r.direction.normalized();
     float t = 0.5f * (unit_dir.y + 1.0f);
     return (1.0f - t) * vec3(1.0f, 1.0f, 1.0f)   // white at horizon
@@ -208,7 +204,7 @@ __device__ bool scatter(const Ray& r_in, const HitRecord& rec, vec3& attenuation
             if (scatter_dir.length_squared() < 1e-8f)
                 scatter_dir = rec.normal;
 
-            // just before you build the secondary ray
+            // just before build the secondary ray
             const vec3 offset = rec.normal *  1e-3f;          // 1 mm bias
             scattered = Ray(rec.p + offset, scatter_dir);     // <-- use p + bias
             attenuation = rec.albedo;
@@ -285,9 +281,9 @@ __device__ vec3 checker_color(const vec3& p) {
 }
 
 
-// ───────────────────────────────────────────────────────────────────────────── 
+
 // CONSTANT-MEMORY KERNEL
-// ─────────────────────────────────────────────────────────────────────────────
+
 __global__ void rayKernel_constant(unsigned char* image,
       Camera*       cam,
       int           n,

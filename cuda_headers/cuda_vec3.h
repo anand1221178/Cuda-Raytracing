@@ -1,7 +1,7 @@
 #ifndef CUDA_VEC3_H
 #define CUDA_VEC3_H
 
-// Definations for intellisense and gcc compilers
+
 #ifndef __CUDACC__
 #define __host__
 #define __device__

@@ -5,7 +5,7 @@
 
 struct Texture {
     int width, height;
-    vec3* data; // Pointer to texture data (array of vec3)
+    vec3* data; // Pointer to texture data
 
     __device__ vec3 value(float u, float v) const{
         int i = static_cast<int>(u*width);

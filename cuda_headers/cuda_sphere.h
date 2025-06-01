@@ -56,13 +56,11 @@ struct Sphere {
 
         /* longitude ------------------------------------------------------------ */
         float u = 0.5f + atan2f(p_local.z, p_local.x) / (2.0f * M_PI);
-        /* wrap into [0,1-EPS]  (never exactly 1) */
         u = u - floorf(u);
         u = fminf(u, 1.0f - EPS);
 
         /* latitude ------------------------------------------------------------- */
         float v = 0.5f - asinf(p_local.y) / M_PI;
-        /* clamp into [EPS, 1-EPS] so never 0 or 1 */
         v = fminf(fmaxf(v, EPS), 1.0f - EPS);
 
         rec.u = u;

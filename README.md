@@ -169,7 +169,3 @@ Edit the `build_scene()` function in `cudaray.cu` to customize sphere placement,
 ## References
 
 Based on Peter Shirley's "Ray Tracing in One Weekend" series, adapted for GPU acceleration using CUDA.
-
-## License
-
-This project is for educational purposes. See individual file headers for specific licensing information.

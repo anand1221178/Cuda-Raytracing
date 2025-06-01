@@ -122,7 +122,7 @@ float time_kernel_3D(KernelPtr k,
     return ms;
 }
 
-// Modified kernel that accepts dynamic parameters
+//kernel that accepts dynamic parameters
 __global__ void rayKernel_benchmark(unsigned char* image, Camera* cam, Sphere* spheres, 
                                    int n, int maxDepth, int width, int height, int samples_per_pixel) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;

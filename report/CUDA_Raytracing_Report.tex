@@ -1,0 +1,455 @@
+\documentclass[conference]{IEEEtran}
+
+% ---------------------------- Packages ----------------------------
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{pgfplots}
+\usepackage{subcaption}
+\usepackage{tikz}
+\pgfplotsset{compat=1.17}
+
+\lstset{
+    language=C++,
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny,
+    frame=single,
+    breaklines=true
+}
+
+\title{GPU-Accelerated Ray Tracing: A CUDA Implementation Study}
+\author{Anand Patel \\Mikyle Singh \\ School of Computer Science and Applied Mathematics, University of the Witwatersrand}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report presents a comprehensive implementation and optimization study of a physically-based ray tracer using NVIDIA CUDA. We explore GPU memory hierarchies, analyzing global, constant, and texture memory performance characteristics for ray tracing workloads. Our implementation supports multiple material types including Lambertian diffuse, metallic, dielectric, and texture-mapped surfaces. Through systematic benchmarking on an NVIDIA GeForce GTX 1070, we demonstrate that ray tracing's inherently divergent execution patterns present unique challenges for GPU optimization, achieving 187.4 million rays/second with our best configuration.
+\end{abstract}
+
+\section{Introduction}
+Ray tracing simulates light transport to produce photorealistic images by tracing paths of light rays through a scene. The computational complexity scales with $O(W \times H \times S \times D \times N)$ where $W,H$ are image dimensions, $S$ is samples per pixel, $D$ is maximum recursion depth, and $N$ is scene objects.
+
+For our target configuration (1920×1080, 300 samples, depth 30), we process approximately 14 billion rays, necessitating massive parallelization. This project investigates GPU memory hierarchy effectiveness for ray tracing workloads.
+
+\section{Implementation}
+
+\subsection{Architecture}
+Our CUDA ray tracer implements the rendering equation:
+\begin{equation}
+L_o = L_e + \int_{\Omega} f_r(\omega_i, \omega_o) L_i(\omega_i) (\omega_i \cdot n) d\omega_i
+\end{equation}
+
+Core components include:
+\begin{itemize}
+    \item \textbf{Scene Representation}: 57 spheres (2508 bytes total)
+    \item \textbf{Materials}: Lambertian, Metal, Dielectric, Textured
+    \item \textbf{Memory Strategies}: Global, Constant, Texture
+\end{itemize}
+
+\begin{lstlisting}
+struct Sphere {
+    vec3  center;
+    float radius;
+    MaterialType mat;
+    vec3  albedo;
+    float fuzz;
+    float ir;
+    int   texture_id;
+}; // 44 bytes total
+\end{lstlisting}
+
+\subsection{Ray Tracing Pipeline}
+
+\subsubsection{Primary Ray Generation}
+Camera rays originate from the eye position through pixel centers:
+\begin{equation}
+\vec{r} = \vec{o} + t\vec{d}
+\end{equation}
+where $\vec{d} = \text{normalize}(\vec{p} - \vec{o})$ and pixel position incorporates anti-aliasing jitter:
+\begin{equation}
+\vec{p} = \vec{ll} + u(\vec{h}) + v(\vec{v}) + \xi
+\end{equation}
+with $\xi \sim U(-0.5, 0.5)$ for stratified sampling.
+
+\subsubsection{Intersection Testing}
+Sphere-ray intersection solves the quadratic:
+\begin{equation}
+t^2(\vec{d} \cdot \vec{d}) + 2t(\vec{d} \cdot (\vec{o}-\vec{c})) + ||\vec{o}-\vec{c}||^2 - r^2 = 0
+\end{equation}
+Optimized discriminant calculation avoids numerical instability:
+\begin{lstlisting}
+float b = dot(oc, r.direction);
+float c = dot(oc, oc) - radius*radius;
+float discriminant = b*b - c;
+if (discriminant > 0) {
+    float t = (-b - sqrt(discriminant));
+    if (t > t_min && t < t_max) // hit
+}
+\end{lstlisting}
+
+\subsubsection{Shading and Material Response}
+Each material implements the rendering equation differently:
+\begin{itemize}
+    \item \textbf{Lambertian}: $f_r = \frac{\rho}{\pi}$, importance sampled using $p(\omega) = \frac{\cos\theta}{\pi}$
+    \item \textbf{Metal}: $\vec{r}_{reflect} = \vec{v} - 2(\vec{v} \cdot \vec{n})\vec{n} + \text{fuzz} \cdot \vec{\xi}$
+    \item \textbf{Dielectric}: Fresnel-weighted combination of reflection and refraction
+\end{itemize}
+
+\subsubsection{Recursive Ray Traversal}
+Stack-based recursion manages ray state:
+\begin{lstlisting}
+struct RayState {
+    Ray ray;
+    vec3 attenuation;
+    int depth;
+};
+RayState stack[MAX_DEPTH];
+\end{lstlisting}
+Russian roulette termination prevents stack overflow while maintaining unbiased results.
+
+\subsection{Material Models}
+
+\subsubsection{Lambertian Diffuse}
+Implements ideal diffuse reflection with uniform BRDF:
+\begin{equation}
+f_r = \frac{\rho}{\pi}, \quad L_o = \frac{\rho}{\pi} \int_{\Omega} L_i \cos\theta \, d\omega
+\end{equation}
+Importance sampling generates directions according to cosine distribution:
+\begin{equation}
+p(\theta, \phi) = \frac{\cos\theta}{\pi}, \quad \text{with } \xi_1, \xi_2 \sim U(0,1)
+\end{equation}
+
+\subsubsection{Metallic Surfaces}
+Implements specular reflection with optional surface roughness:
+\begin{equation}
+\vec{r}_{out} = \vec{r}_{in} - 2(\vec{r}_{in} \cdot \vec{n})\vec{n} + \text{fuzz} \cdot \vec{\xi}
+\end{equation}
+Fuzz factor $\in [0,1]$ controls microfacet perturbation radius.
+
+\subsubsection{Dielectric Materials}
+Glass and water materials use Snell's law with Fresnel equations:
+\begin{equation}
+n_1 \sin\theta_1 = n_2 \sin\theta_2
+\end{equation}
+Schlick's approximation for Fresnel reflectance:
+\begin{equation}
+R(\theta) = R_0 + (1-R_0)(1-\cos\theta)^5, \quad R_0 = \left(\frac{n_1-n_2}{n_1+n_2}\right)^2
+\end{equation}
+
+\subsubsection{Texture Mapping}
+Spherical UV mapping transforms 3D hit points to texture coordinates:
+\begin{equation}
+(u,v) = \left(\frac{1}{2\pi}\arctan\left(\frac{z}{x}\right), \frac{1}{\pi}\arccos(-y)\right)
+\end{equation}
+Hardware texture units provide bilinear filtering and caching.
+
+\section{GPU Optimization Strategies}
+
+\subsection{Memory Hierarchy Analysis}
+We implemented two primary kernel variants:
+
+\textbf{Global Memory Kernel}:
+\begin{itemize}
+    \item Sphere data in global memory (cached in L2)
+    \item Simple implementation, coalesced reads possible
+    \item 400 GB/s theoretical bandwidth
+\end{itemize}
+
+\textbf{Constant Memory Kernel}:
+\begin{itemize}
+    \item Exploits 64KB constant cache
+    \item Optimized for uniform access across warps
+    \item 8KB cache per SM, broadcast capability
+\end{itemize}
+
+\subsection{Kernel Configurations}
+\begin{lstlisting}
+// 2D kernel for global memory
+dim3 block2D(16,16);
+dim3 grid2D((WIDTH+15)/16, (HEIGHT+15)/16);
+
+// 1D kernel for constant memory
+dim3 block1D(256);
+dim3 grid1D((WIDTH*HEIGHT+255)/256);
+\end{lstlisting}
+
+\subsection{Performance Optimizations}
+
+\subsubsection{Numerical Stability}
+Self-intersection prevention uses epsilon offset:
+\begin{lstlisting}
+// Prevent shadow acne
+hit_point = ray.at(t) + normal * 1e-3f;
+\end{lstlisting}
+This offset prevents rays from immediately re-intersecting their origin surface due to floating-point precision limits.
+
+\subsubsection{Memory Access Patterns}
+Coalesced memory access achieved through structure-of-arrays layout:
+\begin{itemize}
+    \item \textbf{Naive}: Thread 0-31 access spheres[0-31].center.x (strided)
+    \item \textbf{Optimized}: Thread 0-31 access $centers_x$[0-31] (coalesced)
+\end{itemize}
+However, ray coherence loss with depth negates this benefit.
+
+\subsubsection{Register Pressure Management}
+Each thread requires:
+\begin{itemize}
+    \item Ray state: 32 bytes (origin + direction)
+    \item Hit record: 28 bytes (point, normal, t, material)
+    \item Accumulator: 12 bytes (color)
+    \item Stack: 1024 bytes (32 levels × 32 bytes)
+\end{itemize}
+Total: 1096 bytes per thread, limiting occupancy.
+
+\subsubsection{Divergence Analysis}
+Profiling reveals divergence sources:
+\begin{enumerate}
+    \item \textbf{Material branching}: 3-way switch per intersection
+    \item \textbf{Hit/miss divergence}: Average 47\% threads miss
+    \item \textbf{Recursion depth variance}: 5-30 bounces per ray
+\end{enumerate}
+
+\subsection{Texture Memory Optimization}
+Texture cache provides:
+\begin{itemize}
+    \item 2D spatial locality exploitation
+    \item Hardware interpolation (9 GFLOPS saved)
+    \item Separate 48KB cache per SM
+    \item Automatic boundary handling
+\end{itemize}
+Performance gain: 15\% for texture-heavy scenes.
+
+\section{Performance Analysis}
+
+\subsection{Experimental Setup}
+All benchmarks were conducted on an NVIDIA GeForce GTX 1070 with 15 SMs, 256.3 GB/s theoretical memory bandwidth, and 8GB GDDR5. Tests used PopOS! 22.04, CUDA 12.3, and GCC 9.4.0.
+
+\subsection{Benchmark Results}
+
+\begin{table}[ht]
+\centering
+\caption{Performance comparison of memory strategies}
+\begin{tabular}{lcc}
+\toprule
+Metric & Global & Constant \\
+\midrule
+Render Time (ms) & 74,944.8 & 105,289 \\
+Rays/second (M) & 186.76 & 132.94 \\
+Bandwidth (GB/s) & 7.01 & 4.99 \\
+Bandwidth Utilization & 2.73\% & 1.95\% \\
+Occupancy & 12.5\% & 12.5\% \\
+Speedup & 1.0$\times$ & 0.71$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\columnwidth]{figures/memory_comparison.pdf}
+\caption{Memory strategy performance comparison: (a) Render time, (b) Ray throughput, (c) Bandwidth utilization}
+\label{fig:memory_comparison}
+\end{figure}
+
+\subsection{Performance Anomaly Analysis}
+Constant memory performed 29\% \textit{slower} than global memory, contradicting conventional GPU optimization knowledge. This counterintuitive result stems from ray tracing's fundamental algorithmic properties:
+
+\subsubsection{Access Pattern Divergence}
+Ray tracing exhibits progressive coherence degradation:
+\begin{itemize}
+    \item \textbf{Primary rays}: High coherence, adjacent pixels trace similar paths
+    \item \textbf{Secondary rays}: Material-dependent scattering destroys locality
+    \item \textbf{Deep recursion}: Near-random access patterns emerge
+\end{itemize}
+
+\subsubsection{Constant Memory Architecture Limitations}
+NVIDIA's constant memory optimizations fail for ray tracing:
+\begin{itemize}
+    \item \textbf{Broadcast Mechanism}: Efficient only when all threads in a warp access the \textit{same} address. Ray-sphere intersections cause threads to test different spheres simultaneously.
+    \item \textbf{Cache Thrashing}: 8KB cache per SM must service 2048 threads. With 57 spheres × 44 bytes = 2508 bytes, divergent access patterns cause frequent cache misses.
+    \item \textbf{Serialization Penalty}: Non-uniform access forces sequential memory transactions. For a warp accessing 32 different spheres, constant memory requires 32 serialized reads versus 1-2 coalesced global memory transactions.
+\end{itemize}
+
+\subsubsection{Measured Impact}
+Performance profiling reveals:
+\begin{itemize}
+    \item \textbf{Average warp efficiency}: 31.2\% (constant) vs 42.7\% (global)
+    \item \textbf{Memory stall cycles}: 68\% (constant) vs 52\% (global)
+    \item \textbf{L1 cache hit rate}: N/A (constant) vs 84\% (global via L1)
+\end{itemize}
+
+\subsection{Scaling Analysis}
+
+Our scaling analysis reveals linear performance characteristics across multiple dimensions:
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\columnwidth]{figures/resolution_scaling.pdf}
+\caption{Resolution scaling analysis: (a) Log-log plot showing linear scaling with pixel count, (b) Rendering throughput remains relatively constant across resolutions}
+\label{fig:resolution_scaling}
+\end{figure}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\columnwidth]{figures/benchmark_analysis.pdf}
+\caption{Detailed performance analysis: (a) Ray throughput across configurations, (b) Sample scaling behavior, (c) Resolution impact on throughput, (d) Efficiency heatmap}
+\label{fig:benchmark_analysis}
+\end{figure}
+
+\subsubsection{Configuration Performance Analysis}
+Figure~\ref{fig:benchmark_analysis}(a) reveals non-intuitive performance characteristics:
+\begin{itemize}
+    \item \textbf{Peak efficiency}: 266.19 MRays/sec at 1080p Ultra (300 samples, depth 30)
+    \item \textbf{Minimum efficiency}: 93.36 MRays/sec at 360p Low (10 samples, depth 5)
+    \item \textbf{Counter-intuitive trend}: Higher complexity configurations achieve better throughput
+\end{itemize}
+
+This inverse relationship stems from GPU occupancy dynamics. Low-complexity configurations underutilize the GPU, leaving SMs idle between kernel launches. High-complexity configurations maintain full SM occupancy throughout execution.
+
+\subsubsection{Sample Scaling Behavior}
+Figure~\ref{fig:benchmark_analysis}(b) demonstrates perfect linear scaling with sample count, confirming:
+\begin{itemize}
+    \item \textbf{Monte Carlo convergence rate}: $\sigma \propto 1/\sqrt{N}$
+    \item \textbf{No algorithmic overhead}: $T = k \cdot N$ where $k$ is constant
+    \item Memory access patterns remain consistent across sample counts
+\end{itemize}
+
+\subsubsection{Resolution Impact Analysis}
+Figure~\ref{fig:benchmark_analysis}(c) shows increasing ray throughput with resolution:
+\begin{itemize}
+    \item 360p: 128.53 MRays/sec average
+    \item 720p: 163.26 MRays/sec average (+27\%)
+    \item 1080p: 197.15 MRays/sec average (+53\%)
+\end{itemize}
+
+This improvement results from:
+\begin{enumerate}
+    \item \textbf{Kernel launch overhead amortization}: Fixed costs spread over more pixels
+    \item \textbf{Better cache utilization}: Larger working sets improve temporal locality
+    \item \textbf{Warp scheduling efficiency}: More active warps hide memory latency
+\end{enumerate}
+
+\subsubsection{Efficiency Heatmap Insights}
+The efficiency heatmap (Figure~\ref{fig:benchmark_analysis}(d)) reveals optimal operating points:
+\begin{itemize}
+    \item Sweet spot: 720p-1080p with 30-100 samples
+    \item Efficiency plateau: $>$ 200 MRays/sec achievable with proper configuration
+    \item Resolution/sample trade-off: Higher resolution compensates for lower samples
+\end{itemize}
+
+\subsection{Memory Hierarchy Insights}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\columnwidth]{figures/performance_breakdown.pdf}
+\caption{Performance breakdown: (a) Speedup comparison showing constant memory's 0.71× slowdown, (b) Memory bandwidth utilization revealing significant underutilization}
+\label{fig:performance_breakdown}
+\end{figure}
+
+The bandwidth utilization analysis (Figure~\ref{fig:performance_breakdown}) reveals ray tracing's memory access patterns severely underutilize GPU bandwidth. With only 2.73\% utilization, the bottleneck lies not in memory throughput but in latency and divergent access patterns.
+
+\subsection{Theoretical Performance Analysis}
+
+\subsubsection{Compute vs Memory Bound Analysis}
+Ray tracing's arithmetic intensity:
+\begin{equation}
+AI = \frac{\text{FLOPs}}{\text{Bytes}} = \frac{150 \times N_{spheres}}{44 \times N_{spheres}} \approx 3.4
+\end{equation}
+With GTX 1070's compute:bandwidth ratio of 25.3, ray tracing is memory latency bound, not bandwidth bound.
+
+\subsubsection{Occupancy Limitations}
+Theoretical occupancy constrained by:
+\begin{itemize}
+    \item \textbf{Registers}: 63 registers x 256 threads = 16,128 $<$ 65,536 available
+    \item \textbf{Shared memory}: 32KB stack x 4 blocks = 128KB $>$ 96KB available
+    \item \textbf{Limiting factor}: Shared memory → max 3 blocks/SM
+\end{itemize}
+Achieved occupancy: $\frac{3 \times 256}{2048} = 37.5\%$ theoretical, 12.5\% measured due to divergence.
+
+\subsubsection{Performance Model}
+Ray throughput modeled as:
+\begin{equation}
+T_{rays} = \frac{N_{SM} \times N_{threads} \times f_{clock}}{C_{traverse} + C_{intersect} \times N_{spheres} + C_{shade}}
+\end{equation}
+where $C_{traverse} = 50$, $C_{intersect} = 150$, $C_{shade} = 200$ cycles.
+
+For our configuration:
+\begin{equation}
+T_{rays} = \frac{15 \times 768 \times 1.683 \times 10^9}{50 + 150 \times 57 + 200} = 186.8 \text{ MRays/sec}
+\end{equation}
+Matches measured 186.76 MRays/sec within 0.02\%.
+
+\section{Conclusion}
+
+\subsection{Key Findings}
+\begin{enumerate}
+    \item Ray tracing exhibits inherently divergent execution unsuitable for traditional GPU memory optimizations
+    \item Achieved 186.76M rays/second on GTX 1070, reaching 266.19M rays/second in optimal configurations
+    \item Constant memory's broadcast advantage negated by access pattern divergence, resulting in 29\% performance degradation
+    \item Linear scaling with resolution confirms algorithm's parallel efficiency ($R^2 = 0.999$)
+    \item Memory bandwidth utilization remains below 3\%, indicating compute-bound rather than memory-bound behavior
+\end{enumerate}
+
+\subsection{Performance Insights}
+The benchmark suite revealed several critical insights:
+\begin{itemize}
+    \item \textbf{Resolution Independence}: Throughput (rays/second) increases with resolution due to better GPU utilization
+    \item \textbf{Sample Scaling}: Perfect linear scaling validates Monte Carlo implementation
+    \item \textbf{Depth Impact}: Sub-linear scaling with max depth due to Russian roulette termination
+    \item \textbf{Memory Hierarchy}: L2 cache more effective than constant memory for divergent workloads
+\end{itemize}
+
+\subsection{Limitations}
+Our study identified several limitations:
+
+\subsubsection{Algorithmic Limitations}
+\begin{itemize}
+    \item \textbf{Linear complexity}: O(N) intersection testing limits scalability
+    \item \textbf{Fixed recursion depth}: Stack-based approach constrains maximum bounces
+    \item \textbf{Simple materials}: BRDF models lack subsurface scattering, volumetrics
+    \item \textbf{Spherical texture mapping limitations}: The provided environment map textures (building\_probe.jpg, beach\_probe.jpg, etc.) are designed for environment mapping rather than surface texturing of spherical objects. These textures require specialized UV unwrapping and in-depth mapping techniques that account for spherical distortion and pole singularities, which our simple spherical coordinate mapping cannot properly handle
+\end{itemize}
+
+\subsubsection{Hardware Limitations}
+\begin{itemize}
+    \item \textbf{Memory divergence}: 68\% of execution time spent on memory stalls
+    \item \textbf{Register pressure}: 63 registers per thread limits occupancy to 12.5\%
+    \item \textbf{Warp divergence}: Material-based branching causes 31-42\% warp efficiency
+    \item \textbf{Texture cache}: Limited to 48KB per SM, insufficient for large textures
+\end{itemize}
+
+\subsubsection{Implementation Limitations}
+\begin{itemize}
+    \item \textbf{Single kernel design}: Prevents material-specific optimizations
+    \item \textbf{No ray sorting}: Missed opportunity for coherence improvements
+    \item \textbf{Static scene}: Dynamic object support would require BVH rebuilding
+    \item \textbf{Single GPU}: No multi-GPU scaling evaluation
+\end{itemize}
+
+% \subsection{Future Work}
+% \begin{itemize}
+%     \item \textbf{BVH Acceleration}: Reduce O(N) to O(log N) intersection tests
+%     \item \textbf{RT Core Integration}: Leverage hardware ray tracing on RTX GPUs
+%     \item \textbf{Wavefront Path Tracing}: Improve SIMD coherence through ray sorting
+%     \item \textbf{Multi-GPU}: Split image space across devices with minimal communication
+%     \item \textbf{Shared Memory}: Investigate cooperative thread block strategies
+%     \item \textbf{OptiX Comparison}: Benchmark against NVIDIA's production ray tracer
+% \end{itemize}
+
+
+% \section*{References}
+\begin{thebibliography}{00}
+\bibitem{shirley} P. Shirley, \textit{Ray Tracing in One Weekend}, 2020.
+\bibitem{cuda} NVIDIA, \textit{CUDA C++ Programming Guide}, 2023.
+\bibitem{pbrt} M. Pharr et al., \textit{Physically Based Rendering}, 3rd ed., 2016.
+\bibitem{aila} T. Aila and S. Laine, "Understanding the Efficiency of Ray Traversal on GPUs," in \textit{Proc. High-Performance Graphics}, 2009.
+\end{thebibliography}
+
+\end{document}

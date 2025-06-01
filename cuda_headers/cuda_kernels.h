@@ -7,14 +7,13 @@
 #include "cuda_sphere.h"
 #include "cuda_camera.h"
 
-#define MAX_SPHERES 64            // make sure n ≤ MAX_SPHERES at launch
+#define MAX_SPHERES 64          
 
-// ── constant-memory scene ──────────────────────────────────────────────────────
-// Declare as byte buffer to avoid constructor issues
+// ── constant-memory scene
 extern __constant__ unsigned char const_spheres_buffer[];
 
 
-// ── kernel prototypes ─────────────────────────────────────────────────────────
+// ── kernel prototypes 
 __global__ void rayKernel   (unsigned char* image, Camera* cam,
                                     Sphere* spheres, int n, int maxDepth);
 

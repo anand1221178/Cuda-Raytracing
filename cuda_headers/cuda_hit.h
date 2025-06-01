@@ -19,7 +19,7 @@ struct HitRecord {
     // Texturing considerations
 
     float u,v;
-    int texture_id; // <-- add this
+    int texture_id;
 
     __host__ __device__ void set_face_normal(const Ray& r, const vec3& outward_normal) {
         front_face = r.direction.dot(outward_normal) < 0.0f;

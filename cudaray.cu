@@ -11,7 +11,7 @@
 #include "cuda_headers/cuda_texobj.h"
 #include <vector>
 #include <random>
-#include <iostream>              // <<< add this right after the other #includes
+#include <iostream>
 
 
 extern __constant__ cudaTextureObject_t dev_textures[5];
@@ -24,7 +24,7 @@ __constant__ unsigned char const_spheres_buffer[64 * sizeof(Sphere)];
 #define HEIGHT 1080
 #define SAMPLES_PER_PIXEL 300
 #define MAX_DEPTH 30
-#define NUM_SPHERES 3  // Must stay at 3 due to constant memory constraints (generates ~55 spheres total)
+#define NUM_SPHERES 3  // Must stay at 3 due to constant memory constraints (generates 55 spheres total)
 
 // #define WIDTH 1280
 // #define HEIGHT 720
@@ -64,7 +64,7 @@ void build_scene(std::vector<Sphere>& H)
     }
 
 
-    // --- two fixed known spheres (for control testing) ---
+    // --- two fixed known spheres --
     // big mirrors
     vec3 silver(0.9f);               // bright grey
     H.push_back({vec3(-4, 1.0f, 0), 1.0f,
@@ -131,7 +131,7 @@ float time_kernel_3D(KernelPtr k,
     return ms;
 }
 
-// overload for constant-memory kernel (no Sphere* param)
+// overload for constant-memory kernel
 template<typename KernelPtr>
 float time_kernel_const(KernelPtr k,
                         unsigned char* d_img,
@@ -186,7 +186,7 @@ int main() {
 
         cudaTextureDesc texDesc = {};
         texDesc.addressMode[0] = cudaAddressModeWrap;
-        texDesc.addressMode[1] = cudaAddressModeClamp;   // latitude (v) – prevent pole seam
+        texDesc.addressMode[1] = cudaAddressModeClamp;   // latitude (v) 
         texDesc.filterMode = cudaFilterModeLinear;
         texDesc.readMode = cudaReadModeNormalizedFloat;
         texDesc.normalizedCoords = 1;
@@ -245,7 +245,7 @@ int main() {
         host_spheres.size() * sizeof(Sphere));
 
     // TODO: Launch rayKernel here
-    cudaDeviceSetLimit(cudaLimitStackSize, 32768); // or 32768 for deep recursion
+    cudaDeviceSetLimit(cudaLimitStackSize, 32768); 
 
     dim3 block2D(16,16);                                    // for original 2-D kernel
     dim3 grid2D((WIDTH+block2D.x-1)/block2D.x,
@@ -263,7 +263,7 @@ int main() {
     cudaDeviceSynchronize();
 
 
-    float t_global = time_kernel_3D(rayKernel,           // your original
+    float t_global = time_kernel_3D(rayKernel,          
         d_img, d_cam, d_spheres,
         host_spheres.size(), MAX_DEPTH,
         grid2D, block2D);
@@ -289,8 +289,8 @@ int main() {
     // ===== BENCHMARK 1: Rays Per Second (RPS) =====
     std::cout << "\n===== RAYS PER SECOND ANALYSIS =====\n";
     
-    // Estimate average secondary rays (bounces) - typically 1.5-2x for diffuse scenes
-    float avg_secondary_rays = 1.5f * MAX_DEPTH / 2.0f; // Rough estimate
+    // Estimate average secondary rays 
+    float avg_secondary_rays = 1.5f * MAX_DEPTH / 2.0f; 
     long long primary_rays = (long long)WIDTH * HEIGHT * SAMPLES_PER_PIXEL;
     long long total_rays = primary_rays * avg_secondary_rays;
     
@@ -305,19 +305,19 @@ int main() {
     // ===== BENCHMARK 2: Memory Bandwidth Utilization =====
     std::cout << "\n===== MEMORY BANDWIDTH ANALYSIS =====\n";
     
-    // More realistic memory access calculation
-    // Each ray typically checks ~10-20 spheres on average (not all)
+    // memory access calculation
+    // Each ray typically checks 10-20 spheres on average
     size_t sphere_data_size = sizeof(Sphere);
     size_t avg_spheres_checked = host_spheres.size() / 3; // Rough estimate
     size_t reads_per_ray = avg_spheres_checked * sphere_data_size;
     size_t writes_per_pixel = 3 * sizeof(unsigned char);
     
-    // Account for texture reads (5 textured spheres)
+    // Account for texture reads
     size_t texture_reads_per_ray = 4 * sizeof(float) * 5; // float4 per texture sample
     
     // Total memory accessed (primary rays only for more accurate estimate)
     size_t total_sphere_reads = primary_rays * reads_per_ray;
-    size_t total_texture_reads = primary_rays * texture_reads_per_ray / 10; // ~10% rays hit textured spheres
+    size_t total_texture_reads = primary_rays * texture_reads_per_ray / 10; // 10% rays hit textured spheres
     size_t total_writes = WIDTH * HEIGHT * writes_per_pixel;
     size_t total_bytes = total_sphere_reads + total_texture_reads + total_writes;
     
